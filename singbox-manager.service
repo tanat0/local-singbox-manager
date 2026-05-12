@@ -1,0 +1,21 @@
+[Unit]
+Description=Sing-Box Web Manager
+After=network.target
+
+[Service]
+Type=simple
+User=nikita
+WorkingDirectory=/home/nikita/Documents/projects/own/local-singbox-manager
+ExecStart=/home/nikita/Documents/projects/own/local-singbox-manager/.venv/bin/uvicorn \
+    app.main:app \
+    --host 127.0.0.1 \
+    --port 9090 \
+    --log-level info
+Restart=on-failure
+RestartSec=5
+# Never expose to LAN — bind is enforced by --host 127.0.0.1 above
+# and additionally blocked here for defence in depth
+IPAddressAllow=127.0.0.1/8
+
+[Install]
+WantedBy=multi-user.target

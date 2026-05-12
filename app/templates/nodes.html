@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Nodes — Sing-Box Manager{% endblock %}
+{% block content %}
+
+<h1>Nodes</h1>
+
+{% if msg %}
+<div class="alert alert-{{ msg_type }}">{{ msg }}</div>
+{% endif %}
+
+<div class="card">
+  <h2>Add / Update Node</h2>
+  <form method="post" action="/nodes">
+    <div class="form-group">
+      <label>Proxy URL (vless://, hysteria2://, hy2://)</label>
+      <textarea name="url" rows="3"
+        placeholder="vless://uuid@host:port?security=reality&amp;pbk=KEY&amp;sni=HOST#tag
+hysteria2://password@host:port?sni=HOST#tag" required></textarea>
+    </div>
+    <button type="submit" class="btn btn-primary">Add / Update</button>
+  </form>
+</div>
+
+<div class="card">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+    <h2 style="margin:0">Nodes ({{ nodes | length }})</h2>
+    <div class="actions" style="margin:0">
+      <a href="/api/nodes/export" class="btn btn-outline">⬇ Export JSON</a>
+    </div>
+  </div>
+
+  {% if nodes %}
+  <table>
+    <thead>
+      <tr>
+        <th>Tag</th><th>Protocol</th><th>Server</th><th>Status</th><th>Extras</th><th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for node in nodes %}
+      {% set parsed = node.parsed_json | fromjson %}
+      <tr>
+        <td><strong>{{ node.tag }}</strong></td>
+        <td><span class="badge badge-blue">{{ node.protocol }}</span></td>
+        <td class="text-dim">{{ parsed.server }}:{{ parsed.port }}</td>
+        <td>
+          {% if node.active %}
+            <span class="badge badge-green">active</span>
+          {% else %}
+            <span class="badge badge-gray">inactive</span>
+          {% endif %}
+        </td>
+        <td class="text-dim">
+          {% if parsed.extra_params %}
+            <span title="{{ parsed.extra_params | tojson }}">{{ parsed.extra_params | length }} unknown</span>
+          {% else %}—{% endif %}
+        </td>
+        <td>
+          <div class="actions">
+            {% if not node.active %}
+            <form method="post" action="/nodes/{{ node.id }}/activate">
+              <button type="submit" class="btn btn-success">Activate</button>
+            </form>
+            {% endif %}
+            <form method="post" action="/nodes/{{ node.id }}/delete"
+                  onsubmit="return confirm('Delete node {{ node.tag | e }}?')">
+              <button type="submit" class="btn btn-danger">Delete</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="text-dim">No nodes yet. Paste a proxy URL above to add one.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Import Nodes (JSON)</h2>
+  <form method="post" action="/api/nodes/import" enctype="application/x-www-form-urlencoded">
+    <div class="form-group">
+      <label>Paste exported nodes JSON</label>
+      <textarea name="nodes_json" rows="4" placeholder='[{"raw_url": "vless://..."}]'></textarea>
+    </div>
+    <button type="submit" class="btn btn-outline">Import</button>
+  </form>
+</div>
+
+{% endblock %}

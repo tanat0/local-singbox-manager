@@ -1,0 +1,434 @@
+from __future__ import annotations
+import difflib
+import json
+import re
+from pathlib import Path
+from typing import Annotated
+from urllib.parse import quote
+
+from fastapi import Depends, FastAPI, Form, Request
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from markupsafe import escape
+from sqlalchemy.orm import Session
+
+from app.db import Base, engine, get_db
+from app.health import run_health_checks, check_external_ip
+from app.models import Node, Settings
+from app.parsers import parse_url, ParsedNode, VlessNode, Hysteria2Node
+from app.singbox import service as svc
+from app.singbox.deployer import (
+    deploy_with_rollback, list_backups, restore_backup, get_current_config,
+)
+from app.singbox.dns import DNS_PRESETS, DEFAULT_DNS_PRESET
+from app.singbox.generator import generate_config, build_outbound
+from app.singbox.routes import ROUTE_PRESETS, DEFAULT_ROUTE_PRESET
+from app.singbox.validator import validate_config
+
+Base.metadata.create_all(bind=engine)
+
+app = FastAPI(title="Sing-Box Manager", docs_url=None, redoc_url=None)
+
+BASE_DIR = Path(__file__).parent
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+templates.env.filters["fromjson"] = json.loads
+templates.env.filters["tojson"] = json.dumps
+
+app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _redirect(path: str, msg: str = "", msg_type: str = "info") -> RedirectResponse:
+    url = path
+    if msg:
+        url += f"?msg={quote(msg)}&msg_type={msg_type}"
+    return RedirectResponse(url=url, status_code=303)
+
+
+def _get_setting(db: Session, key: str, default: str = "") -> str:
+    s = db.query(Settings).filter(Settings.key == key).first()
+    return s.value if s else default
+
+
+def _set_setting(db: Session, key: str, value: str) -> None:
+    s = db.query(Settings).filter(Settings.key == key).first()
+    if s:
+        s.value = value
+    else:
+        db.add(Settings(key=key, value=value))
+    db.commit()
+
+
+def _deserialize_node(node: Node) -> ParsedNode:
+    data = json.loads(node.parsed_json)
+    proto = data.get("protocol", "")
+    if proto == "vless":
+        return VlessNode.model_validate(data)
+    if proto in ("hysteria2", "hy2"):
+        return Hysteria2Node.model_validate(data)
+    raise ValueError(f"Unknown protocol in DB: {proto!r}")
+
+
+def _presets(db: Session) -> tuple[str, str]:
+    return (
+        _get_setting(db, "dns_preset", DEFAULT_DNS_PRESET),
+        _get_setting(db, "route_preset", DEFAULT_ROUTE_PRESET),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Dashboard
+# ---------------------------------------------------------------------------
+
+@app.get("/", response_class=HTMLResponse)
+async def dashboard(request: Request, db: Session = Depends(get_db)):
+    status = svc.get_status()
+    active_node = db.query(Node).filter(Node.active.is_(True)).first()
+    return templates.TemplateResponse("dashboard.html", {
+        "request": request,
+        "status": status,
+        "active_node": active_node,
+        "msg": request.query_params.get("msg", ""),
+        "msg_type": request.query_params.get("msg_type", "info"),
+    })
+
+
+@app.post("/service/{action}")
+async def service_action(action: str):
+    if action == "restart":
+        ok, out = svc.restart()
+    elif action == "stop":
+        ok, out = svc.stop()
+    elif action == "start":
+        ok, out = svc.start()
+    elif action == "reload":
+        ok, out = svc.reload_or_restart()
+    else:
+        return _redirect("/", msg=f"Unknown action: {action}", msg_type="error")
+    return _redirect("/", msg=out[:300] or action, msg_type="success" if ok else "error")
+
+
+@app.post("/validate")
+async def validate_active(db: Session = Depends(get_db)):
+    node = db.query(Node).filter(Node.active.is_(True)).first()
+    if not node:
+        return _redirect("/", msg="No active node", msg_type="error")
+    try:
+        parsed = _deserialize_node(node)
+        dns_p, route_p = _presets(db)
+        config = generate_config(parsed, dns_preset=dns_p, route_preset=route_p)
+    except Exception as e:
+        return _redirect("/", msg=f"Config generation error: {e}", msg_type="error")
+    ok, msg = validate_config(config)
+    return _redirect("/", msg=msg, msg_type="success" if ok else "error")
+
+
+# ---------------------------------------------------------------------------
+# HTMX partials
+# ---------------------------------------------------------------------------
+
+@app.get("/api/ip", response_class=HTMLResponse)
+async def api_ip():
+    ip, err = await check_external_ip()
+    if ip:
+        return HTMLResponse(f'<span class="ip-value">{ip}</span>')
+    return HTMLResponse(f'<span class="text-dim">Error: {err}</span>')
+
+
+@app.get("/api/logs", response_class=HTMLResponse)
+async def api_logs(lines: int = 100):
+    lines = min(lines, 500)
+    return HTMLResponse(f'<pre class="log-output">{escape(svc.get_logs(lines))}</pre>')
+
+
+@app.get("/api/health", response_class=HTMLResponse)
+async def api_health():
+    report = await run_health_checks()
+    cls = {"connected": "badge-green", "degraded": "badge-warning",
+           "failed": "badge-red"}.get(report.overall, "badge-gray")
+    rows = []
+    for c in report.checks:
+        sym = "✓" if c.ok else "✗"
+        tr_cls = "check-ok" if c.ok else "check-fail"
+        lat = f"{c.latency_ms:.0f}ms" if c.latency_ms else "—"
+        rows.append(
+            f'<tr class="{tr_cls}"><td>{sym}</td><td>{escape(c.name)}</td>'
+            f'<td class="text-dim">{lat}</td>'
+            f'<td class="text-dim">{escape(c.detail)}</td></tr>'
+        )
+    ip_line = (
+        f'<div style="margin-top:12px" class="text-dim">'
+        f'External IP: <strong>{escape(report.external_ip or "—")}</strong></div>'
+    )
+    return HTMLResponse(
+        f'<span class="badge {cls}" style="font-size:14px;margin-bottom:14px;display:inline-block">'
+        f'{report.overall.upper()}</span>'
+        f'<table><thead><tr><th></th><th>Check</th><th>Latency</th><th>Detail</th></tr></thead>'
+        f'<tbody>{"".join(rows)}</tbody></table>{ip_line}'
+    )
+
+
+@app.get("/api/diff", response_class=HTMLResponse)
+async def api_diff(db: Session = Depends(get_db)):
+    node = db.query(Node).filter(Node.active.is_(True)).first()
+    if not node:
+        return HTMLResponse('<p class="text-dim">No active node selected.</p>')
+
+    current = get_current_config()
+    current_text = json.dumps(current, indent=2) if current else "(no deployed config)"
+
+    try:
+        parsed = _deserialize_node(node)
+        dns_p, route_p = _presets(db)
+        new_config = generate_config(parsed, dns_preset=dns_p, route_preset=route_p)
+        new_text = json.dumps(new_config, indent=2)
+    except Exception as e:
+        return HTMLResponse(f'<p class="text-dim">Generation error: {e}</p>')
+
+    diff = list(difflib.unified_diff(
+        current_text.splitlines(keepends=True),
+        new_text.splitlines(keepends=True),
+        fromfile="deployed", tofile="pending", n=3,
+    ))
+    if not diff:
+        return HTMLResponse('<p class="text-dim">No changes — config is already current.</p>')
+
+    parts = []
+    for line in diff:
+        esc = str(escape(line))
+        if line.startswith("+") and not line.startswith("+++"):
+            parts.append(f'<span class="diff-add">{esc}</span>')
+        elif line.startswith("-") and not line.startswith("---"):
+            parts.append(f'<span class="diff-del">{esc}</span>')
+        elif line.startswith("@@"):
+            parts.append(f'<span class="diff-hunk">{esc}</span>')
+        else:
+            parts.append(esc)
+    return HTMLResponse(f'<pre class="log-output diff-output">{"".join(parts)}</pre>')
+
+
+# ---------------------------------------------------------------------------
+# Nodes
+# ---------------------------------------------------------------------------
+
+@app.get("/nodes", response_class=HTMLResponse)
+async def nodes_page(request: Request, db: Session = Depends(get_db)):
+    nodes = db.query(Node).order_by(Node.created_at.desc()).all()
+    return templates.TemplateResponse("nodes.html", {
+        "request": request,
+        "nodes": nodes,
+        "msg": request.query_params.get("msg", ""),
+        "msg_type": request.query_params.get("msg_type", "info"),
+    })
+
+
+@app.post("/nodes")
+async def add_node(url: Annotated[str, Form()], db: Session = Depends(get_db)):
+    try:
+        parsed = parse_url(url)
+    except Exception as e:
+        return _redirect("/nodes", msg=f"Parse error: {e}", msg_type="error")
+
+    existing = db.query(Node).filter(Node.tag == parsed.tag).first()
+    if existing:
+        existing.raw_url = parsed.raw_url
+        existing.protocol = parsed.protocol
+        existing.parsed_json = json.dumps(parsed.to_dict())
+        existing.schema_version = parsed.schema_version
+        db.commit()
+        return _redirect("/nodes", msg=f"Updated '{parsed.tag}'", msg_type="success")
+
+    db.add(Node(
+        tag=parsed.tag, protocol=parsed.protocol, raw_url=parsed.raw_url,
+        parsed_json=json.dumps(parsed.to_dict()),
+        schema_version=parsed.schema_version, active=False,
+    ))
+    db.commit()
+    return _redirect("/nodes", msg=f"Added '{parsed.tag}'", msg_type="success")
+
+
+@app.post("/nodes/{node_id}/delete")
+async def delete_node(node_id: int, db: Session = Depends(get_db)):
+    node = db.query(Node).filter(Node.id == node_id).first()
+    if not node:
+        return _redirect("/nodes", msg="Node not found", msg_type="error")
+    was_active, tag = node.active, node.tag
+    db.delete(node)
+    db.commit()
+    msg = f"Deleted '{tag}'"
+    if was_active:
+        msg += " (was active — sing-box still runs previous config)"
+    return _redirect("/nodes", msg=msg, msg_type="success")
+
+
+@app.post("/nodes/{node_id}/activate")
+async def activate_node(node_id: int, db: Session = Depends(get_db)):
+    node = db.query(Node).filter(Node.id == node_id).first()
+    if not node:
+        return _redirect("/nodes", msg="Node not found", msg_type="error")
+    try:
+        parsed = _deserialize_node(node)
+    except Exception as e:
+        return _redirect("/nodes", msg=f"Failed to load node: {e}", msg_type="error")
+    try:
+        dns_p, route_p = _presets(db)
+        config = generate_config(parsed, dns_preset=dns_p, route_preset=route_p)
+    except Exception as e:
+        return _redirect("/nodes", msg=f"Config generation failed: {e}", msg_type="error")
+
+    result = await deploy_with_rollback(config, node.tag, health_check=True)
+
+    if not result.success:
+        return _redirect("/nodes", msg=result.user_message(), msg_type="error")
+
+    db.query(Node).update({"active": False})
+    node.active = True
+    db.commit()
+    return _redirect("/", msg=result.user_message(), msg_type="success")
+
+
+# ---------------------------------------------------------------------------
+# Import / Export
+# ---------------------------------------------------------------------------
+
+@app.get("/api/nodes/export")
+async def export_nodes(db: Session = Depends(get_db)):
+    nodes = db.query(Node).all()
+    data = [{"tag": n.tag, "protocol": n.protocol, "raw_url": n.raw_url,
+              "parsed": json.loads(n.parsed_json), "schema_version": n.schema_version}
+            for n in nodes]
+    content = json.dumps(data, indent=2, ensure_ascii=False)
+    return StreamingResponse(
+        iter([content]), media_type="application/json",
+        headers={"Content-Disposition": "attachment; filename=singbox-nodes.json"},
+    )
+
+
+@app.post("/api/nodes/import")
+async def import_nodes(nodes_json: Annotated[str, Form()], db: Session = Depends(get_db)):
+    try:
+        data = json.loads(nodes_json)
+        if not isinstance(data, list):
+            raise ValueError("Expected a JSON array")
+    except Exception as e:
+        return _redirect("/nodes", msg=f"Import error: {e}", msg_type="error")
+
+    imported, errors = 0, []
+    for item in data:
+        raw_url = item.get("raw_url", "")
+        if not raw_url:
+            continue
+        try:
+            parsed = parse_url(raw_url)
+            ex = db.query(Node).filter(Node.tag == parsed.tag).first()
+            if ex:
+                ex.raw_url = parsed.raw_url
+                ex.protocol = parsed.protocol
+                ex.parsed_json = json.dumps(parsed.to_dict())
+                ex.schema_version = parsed.schema_version
+            else:
+                db.add(Node(tag=parsed.tag, protocol=parsed.protocol, raw_url=parsed.raw_url,
+                            parsed_json=json.dumps(parsed.to_dict()),
+                            schema_version=parsed.schema_version, active=False))
+            imported += 1
+        except Exception as e:
+            errors.append(f"{raw_url[:40]}: {e}")
+    db.commit()
+    msg = f"Imported {imported} nodes"
+    if errors:
+        msg += f". Skipped: {'; '.join(errors[:3])}"
+    return _redirect("/nodes", msg=msg, msg_type="success" if imported else "error")
+
+
+# ---------------------------------------------------------------------------
+# Logs
+# ---------------------------------------------------------------------------
+
+@app.get("/logs", response_class=HTMLResponse)
+async def logs_page(request: Request):
+    try:
+        lines = min(int(request.query_params.get("lines", "100")), 500)
+    except ValueError:
+        lines = 100
+    return templates.TemplateResponse("logs.html", {
+        "request": request,
+        "log_text": svc.get_logs(lines),
+        "lines": lines,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Diagnostics
+# ---------------------------------------------------------------------------
+
+@app.get("/diagnostics", response_class=HTMLResponse)
+async def diagnostics_page(request: Request, db: Session = Depends(get_db)):
+    active_node = db.query(Node).filter(Node.active.is_(True)).first()
+    return templates.TemplateResponse("diagnostics.html", {
+        "request": request,
+        "active_node": active_node,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Backups
+# ---------------------------------------------------------------------------
+
+@app.get("/backups", response_class=HTMLResponse)
+async def backups_page(request: Request):
+    return templates.TemplateResponse("backups.html", {
+        "request": request,
+        "backups": list_backups(),
+        "msg": request.query_params.get("msg", ""),
+        "msg_type": request.query_params.get("msg_type", "info"),
+    })
+
+
+@app.post("/backups/{name}/restore")
+async def restore_backup_route(name: str, db: Session = Depends(get_db)):
+    if not re.match(r'^config_\d{8}_\d{6}\.json$', name):
+        return _redirect("/backups", msg="Invalid backup filename", msg_type="error")
+    ok, msg = restore_backup(name)
+    if not ok:
+        return _redirect("/backups", msg=f"Restore failed: {msg}", msg_type="error")
+    svc.restart()
+    db.query(Node).update({"active": False})
+    db.commit()
+    return _redirect("/", msg=f"Restored {name} — sing-box restarted", msg_type="success")
+
+
+# ---------------------------------------------------------------------------
+# Settings
+# ---------------------------------------------------------------------------
+
+@app.get("/settings", response_class=HTMLResponse)
+async def settings_page(request: Request, db: Session = Depends(get_db)):
+    dns_p, route_p = _presets(db)
+    return templates.TemplateResponse("settings.html", {
+        "request": request,
+        "dns_preset": dns_p,
+        "route_preset": route_p,
+        "dns_presets": DNS_PRESETS,
+        "route_presets": ROUTE_PRESETS,
+        "msg": request.query_params.get("msg", ""),
+        "msg_type": request.query_params.get("msg_type", "info"),
+    })
+
+
+@app.post("/settings")
+async def save_settings(
+    dns_preset: Annotated[str, Form()],
+    route_preset: Annotated[str, Form()],
+    db: Session = Depends(get_db),
+):
+    if dns_preset not in DNS_PRESETS:
+        return _redirect("/settings", msg=f"Invalid DNS preset", msg_type="error")
+    if route_preset not in ROUTE_PRESETS:
+        return _redirect("/settings", msg=f"Invalid route preset", msg_type="error")
+    _set_setting(db, "dns_preset", dns_preset)
+    _set_setting(db, "route_preset", route_preset)
+    return _redirect("/settings", msg="Saved. Re-activate node to apply.", msg_type="success")

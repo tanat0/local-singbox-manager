@@ -1,0 +1,152 @@
+from __future__ import annotations
+import asyncio
+import json
+import os
+import re
+import subprocess
+import uuid as _uuid
+from dataclasses import dataclass, field
+from typing import Optional
+
+from app.singbox.validator import validate_config
+
+HELPER_BIN = os.environ.get("HELPER_BIN", "/usr/local/bin/singbox-manager-helper")
+
+
+@dataclass
+class DeployResult:
+    success: bool
+    stage: str = ""          # validate | deploy | reload | health | ok
+    error: str = ""
+    rolled_back: bool = False
+    backup_name: Optional[str] = None
+    node_tag: Optional[str] = None
+
+    def user_message(self) -> str:
+        if self.success:
+            suffix = f" (backup: {self.backup_name})" if self.backup_name else ""
+            return f"✓ Active: {self.node_tag}{suffix}"
+        base = f"Deploy failed at '{self.stage}': {self.error}"
+        if self.rolled_back:
+            base += " — automatically rolled back to previous config"
+        elif self.backup_name:
+            base += f" — manual rollback available: {self.backup_name}"
+        return base
+
+
+def _run_helper(*args: str, timeout: int = 30) -> tuple[bool, str]:
+    try:
+        result = subprocess.run(
+            ["sudo", HELPER_BIN, *args],
+            capture_output=True, text=True, timeout=timeout,
+        )
+        out = (result.stdout + result.stderr).strip()
+        return result.returncode == 0, out
+    except subprocess.TimeoutExpired:
+        return False, f"Helper timed out after {timeout}s"
+    except FileNotFoundError:
+        return False, f"Helper not found at {HELPER_BIN}. See README install steps."
+    except Exception as e:
+        return False, str(e)
+
+
+def _extract_backup_name(output: str) -> Optional[str]:
+    m = re.search(r'config_\d{8}_\d{6}\.json', output)
+    return m.group(0) if m else None
+
+
+def _service_is_active() -> bool:
+    try:
+        r = subprocess.run(
+            ["systemctl", "is-active", "sing-box.service"],
+            capture_output=True, text=True, timeout=5,
+        )
+        return r.stdout.strip() == "active"
+    except Exception:
+        return False
+
+
+def _do_rollback(backup_name: str) -> tuple[bool, str]:
+    ok, out = _run_helper("restore", backup_name)
+    if not ok:
+        return False, f"restore failed: {out}"
+    _run_helper("restart")   # best-effort restart after rollback
+    return True, out
+
+
+async def deploy_with_rollback(
+    config: dict,
+    node_tag: str,
+    health_check: bool = True,
+) -> DeployResult:
+    # 1. Validate before touching anything
+    ok, err = validate_config(config)
+    if not ok:
+        return DeployResult(success=False, stage="validate", error=err)
+
+    # 2. Write temp file and deploy via helper (helper creates the backup)
+    tmppath = f"/tmp/singbox-deploy-{_uuid.uuid4()}.json"
+    try:
+        with open(tmppath, "w") as f:
+            json.dump(config, f, indent=2)
+        os.chmod(tmppath, 0o644)
+        ok, output = _run_helper("deploy", tmppath)
+    finally:
+        if os.path.exists(tmppath):
+            os.unlink(tmppath)
+
+    if not ok:
+        return DeployResult(success=False, stage="deploy", error=output)
+
+    backup_name = _extract_backup_name(output)
+
+    # 3. Reload/restart service
+    ok, err = _run_helper("reload")
+    if not ok:
+        ok, err = _run_helper("restart")  # fallback if ExecReload not configured
+    if not ok:
+        rolled_back = False
+        if backup_name:
+            rolled_back, _ = _do_rollback(backup_name)
+        return DeployResult(
+            success=False, stage="reload", error=err,
+            rolled_back=rolled_back, backup_name=backup_name,
+        )
+
+    # 4. Health check — wait for service to stabilise, then verify active
+    if health_check:
+        await asyncio.sleep(3)
+        if not _service_is_active():
+            rolled_back = False
+            if backup_name:
+                rolled_back, _ = _do_rollback(backup_name)
+            return DeployResult(
+                success=False, stage="health",
+                error="sing-box.service not active after restart",
+                rolled_back=rolled_back, backup_name=backup_name,
+            )
+
+    return DeployResult(success=True, stage="ok", node_tag=node_tag, backup_name=backup_name)
+
+
+def list_backups() -> list[str]:
+    ok, out = _run_helper("list-backups")
+    if not ok:
+        return []
+    try:
+        return json.loads(out)
+    except Exception:
+        return []
+
+
+def restore_backup(name: str) -> tuple[bool, str]:
+    return _run_helper("restore", name)
+
+
+def get_current_config() -> Optional[dict]:
+    """Read deployed config directly — readable at 0o644, no sudo needed."""
+    try:
+        with open("/etc/sing-box/config.json") as f:
+            return json.load(f)
+    except Exception:
+        return None

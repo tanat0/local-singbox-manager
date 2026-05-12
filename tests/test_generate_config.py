@@ -1,0 +1,120 @@
+import pytest
+from app.parsers.vless import parse_vless, VlessNode
+from app.parsers.hysteria2 import parse_hysteria2, Hysteria2Node
+from app.singbox.generator import generate_config, build_outbound
+
+VLESS_URL = (
+    "vless://some-uuid@1.2.3.4:443"
+    "?security=reality&sni=example.com&pbk=pubkey&sid=shortid&fp=chrome&type=tcp"
+    "#test-node"
+)
+HY2_URL = "hysteria2://secret@5.5.5.5:8443?sni=hy2.example.com#hy2-node"
+
+
+# ---- outbound builders ----
+
+def test_vless_outbound_type():
+    out = build_outbound(parse_vless(VLESS_URL))
+    assert out["type"] == "vless"
+
+
+def test_hy2_outbound_type():
+    out = build_outbound(parse_hysteria2(HY2_URL))
+    assert out["type"] == "hysteria2"
+
+
+def test_vless_reality_structure():
+    out = build_outbound(parse_vless(VLESS_URL))
+    assert out["tls"]["reality"]["enabled"] is True
+    assert out["tls"]["reality"]["public_key"] == "pubkey"
+
+
+# ---- full config generation ----
+
+def test_config_required_top_keys():
+    cfg = generate_config(parse_vless(VLESS_URL))
+    for key in ("log", "dns", "inbounds", "route", "outbounds"):
+        assert key in cfg
+
+
+def test_active_outbound_is_first():
+    node = parse_vless(VLESS_URL)
+    cfg = generate_config(node)
+    assert cfg["outbounds"][0]["tag"] == node.tag
+
+
+def test_route_final_matches_tag():
+    node = parse_vless(VLESS_URL)
+    cfg = generate_config(node)
+    assert cfg["route"]["final"] == node.tag
+
+
+def test_has_direct_and_block():
+    cfg = generate_config(parse_vless(VLESS_URL))
+    tags = {o["tag"] for o in cfg["outbounds"]}
+    assert "direct" in tags
+    assert "block" in tags
+
+
+def test_three_outbounds():
+    assert len(generate_config(parse_vless(VLESS_URL))["outbounds"]) == 3
+
+
+def test_dns_new_format():
+    cfg = generate_config(parse_vless(VLESS_URL))
+    server = cfg["dns"]["servers"][0]
+    assert "type" in server and "server" in server and "tag" in server
+    assert "address" not in server   # must NOT use deprecated format
+
+
+def test_tun_inbound():
+    cfg = generate_config(parse_vless(VLESS_URL))
+    tun = next((i for i in cfg["inbounds"] if i["type"] == "tun"), None)
+    assert tun is not None
+    assert tun["auto_route"] is True
+    assert tun["stack"] == "gvisor"
+
+
+def test_dns_hijack_rule():
+    cfg = generate_config(parse_vless(VLESS_URL))
+    rule = next((r for r in cfg["route"]["rules"] if r.get("action") == "hijack-dns"), None)
+    assert rule is not None and rule["port"] == 53
+
+
+def test_base_not_mutated():
+    n1 = parse_vless(VLESS_URL)
+    n2 = parse_hysteria2(HY2_URL)
+    c1 = generate_config(n1)
+    c2 = generate_config(n2)
+    assert c1["route"]["final"] == "test-node"
+    assert c2["route"]["final"] == "hy2-node"
+
+
+def test_log_timestamp():
+    assert generate_config(parse_vless(VLESS_URL))["log"]["timestamp"] is True
+
+
+def test_bypass_lan_preset_has_private_ip_rule():
+    cfg = generate_config(parse_vless(VLESS_URL), route_preset="bypass_lan")
+    rules = cfg["route"]["rules"]
+    private_rule = next((r for r in rules if r.get("ip_is_private")), None)
+    assert private_rule is not None
+    assert private_rule["outbound"] == "direct"
+
+
+def test_invalid_dns_preset_raises():
+    with pytest.raises(ValueError, match="DNS"):
+        generate_config(parse_vless(VLESS_URL), dns_preset="nonexistent")
+
+
+def test_invalid_route_preset_raises():
+    with pytest.raises(ValueError, match="route"):
+        generate_config(parse_vless(VLESS_URL), route_preset="nonexistent")
+
+
+def test_parse_url_registry():
+    from app.parsers import parse_url
+    n = parse_url(VLESS_URL)
+    assert isinstance(n, VlessNode)
+    n2 = parse_url(HY2_URL)
+    assert isinstance(n2, Hysteria2Node)

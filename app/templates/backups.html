@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Backups — Sing-Box Manager{% endblock %}
+{% block content %}
+
+<h1>Config Backups</h1>
+
+{% if msg %}
+<div class="alert alert-{{ msg_type }}">{{ msg }}</div>
+{% endif %}
+
+<div class="card">
+  <p class="text-dim" style="margin-bottom: 16px;">
+    Backups are created automatically before each deploy to <code>/etc/sing-box/backups/</code>.
+    Restoring replaces the current config and restarts sing-box.
+  </p>
+
+  {% if backups %}
+  <table>
+    <thead>
+      <tr>
+        <th>Backup</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for backup in backups %}
+      <tr>
+        <td><code>{{ backup }}</code></td>
+        <td>
+          <form method="post" action="/backups/{{ backup }}/restore"
+                onsubmit="return confirm('Restore {{ backup | e }}?\nThis overwrites the current config and restarts sing-box.')">
+            <button type="submit" class="btn btn-primary">Restore</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="text-dim">No backups found. Deploy a config to create the first backup.</p>
+  {% endif %}
+</div>
+
+{% endblock %}

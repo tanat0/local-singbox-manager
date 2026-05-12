@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Sing-Box Manager{% endblock %}
+{% block content %}
+
+<h1>Dashboard</h1>
+
+{% if msg %}
+<div class="alert alert-{{ msg_type }}">{{ msg }}</div>
+{% endif %}
+
+<div class="card-grid">
+
+  <div class="card">
+    <h2>Service</h2>
+    <div style="margin-bottom:12px">
+      {% if status.active_state == "active" %}
+        <span class="badge badge-green">{{ status.active_state }}/{{ status.sub_state }}</span>
+      {% elif status.active_state in ["inactive","failed","error"] %}
+        <span class="badge badge-red">{{ status.active_state }}/{{ status.sub_state }}</span>
+      {% else %}
+        <span class="badge badge-gray">{{ status.active_state }}/{{ status.sub_state }}</span>
+      {% endif %}
+      {% if status.pid and status.pid != "0" %}
+        <span class="text-dim">PID {{ status.pid }}</span>
+      {% endif %}
+    </div>
+    {% if status.since %}<div class="text-dim" style="margin-bottom:10px">Since {{ status.since }}</div>{% endif %}
+    <div class="actions">
+      <form method="post" action="/service/restart"><button class="btn btn-primary">Restart</button></form>
+      <form method="post" action="/service/start"><button class="btn btn-success">Start</button></form>
+      <form method="post" action="/service/stop"><button class="btn btn-danger">Stop</button></form>
+      <form method="post" action="/validate"><button class="btn btn-outline">Validate Config</button></form>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Active Node</h2>
+    {% if active_node %}
+      {% set parsed = active_node.parsed_json | fromjson %}
+      <div style="margin-bottom:6px">
+        <span class="badge badge-blue">{{ active_node.protocol }}</span>
+        <strong>{{ active_node.tag }}</strong>
+      </div>
+      <div class="text-dim">{{ parsed.server }}:{{ parsed.port }}</div>
+      {% if parsed.extra_params %}
+        <div class="text-dim" style="margin-top:4px">{{ parsed.extra_params | length }} extra params</div>
+      {% endif %}
+    {% else %}
+      <div class="text-dim" style="margin-bottom:12px">No active node.</div>
+      <a href="/nodes" class="btn btn-outline">Add Node →</a>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>External IP</h2>
+    <div id="ip-display" hx-get="/api/ip" hx-trigger="load" hx-swap="innerHTML">
+      <span class="text-dim">Checking…</span>
+    </div>
+    <div style="margin-top:10px">
+      <button class="btn btn-outline"
+              hx-get="/api/ip" hx-target="#ip-display" hx-swap="innerHTML">↻ Recheck</button>
+      <a href="/diagnostics" class="btn btn-outline">Full Diagnostics →</a>
+    </div>
+  </div>
+
+</div>
+
+<div class="card">
+  <h2>Config Diff <span class="text-dim">(deployed vs pending)</span></h2>
+  <div id="diff-display" hx-get="/api/diff" hx-trigger="load" hx-swap="innerHTML">
+    <span class="text-dim">Loading…</span>
+  </div>
+  <div style="margin-top:10px">
+    <button class="btn btn-outline"
+            hx-get="/api/diff" hx-target="#diff-display" hx-swap="innerHTML">↻ Refresh</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Recent Logs</h2>
+  <div id="log-snippet" hx-get="/api/logs?lines=30" hx-trigger="load" hx-swap="innerHTML">
+    <span class="text-dim">Loading…</span>
+  </div>
+  <div style="margin-top:10px;display:flex;gap:8px">
+    <button class="btn btn-outline"
+            hx-get="/api/logs?lines=30" hx-target="#log-snippet" hx-swap="innerHTML">↻ Refresh</button>
+    <a href="/logs" class="btn btn-outline">Full Logs →</a>
+  </div>
+</div>
+
+{% endblock %}

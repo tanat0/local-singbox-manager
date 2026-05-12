@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Diagnostics — Sing-Box Manager{% endblock %}
+{% block content %}
+
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+  <h1 style="margin:0">Diagnostics</h1>
+  {% if active_node %}
+    {% set parsed = active_node.parsed_json | fromjson %}
+    <span class="text-dim">Active: <strong>{{ active_node.tag }}</strong> — {{ parsed.server }}:{{ parsed.port }}</span>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Tunnel Health</h2>
+  <div id="health-results"
+       hx-get="/api/health"
+       hx-trigger="load"
+       hx-swap="innerHTML">
+    <span class="text-dim">Running checks…</span>
+  </div>
+  <div style="margin-top:14px">
+    <button class="btn btn-primary"
+            hx-get="/api/health"
+            hx-target="#health-results"
+            hx-swap="innerHTML"
+            hx-indicator="#health-results">
+      ↻ Run Again
+    </button>
+  </div>
+  <p class="text-dim" style="margin-top:10px">
+    Checks run through the active TUN — a passing result confirms end-to-end VPN connectivity.
+  </p>
+</div>
+
+<div class="card">
+  <h2>Config Diff <span class="text-dim">(deployed vs would-be-deployed)</span></h2>
+  <div id="diff-display"
+       hx-get="/api/diff"
+       hx-trigger="load"
+       hx-swap="innerHTML">
+    <span class="text-dim">Loading…</span>
+  </div>
+  <div style="margin-top:10px">
+    <button class="btn btn-outline"
+            hx-get="/api/diff"
+            hx-target="#diff-display"
+            hx-swap="innerHTML">↻ Refresh</button>
+  </div>
+</div>
+
+{% endblock %}

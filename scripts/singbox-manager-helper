@@ -1,0 +1,156 @@
+#!/usr/bin/env python3
+"""
+singbox-manager-helper — privileged helper for sing-box manager.
+
+Called exclusively via: sudo /usr/local/bin/singbox-manager-helper <action> [arg]
+
+Actions:
+  deploy <src>       — backup current config, copy src to /etc/sing-box/config.json
+  restart            — systemctl restart sing-box.service
+  stop               — systemctl stop sing-box.service
+  start              — systemctl start sing-box.service
+  list-backups       — print JSON array of backup filenames (newest first)
+  restore <name>     — restore a backup by filename
+
+Security:
+  - Only whitelisted actions are accepted.
+  - Source path for deploy must match /tmp/singbox-deploy-<uuid>.json exactly.
+  - Backup name for restore must match config_YYYYMMDD_HHMMSS.json exactly.
+  - No shell=True, no arbitrary command execution.
+"""
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+from datetime import datetime
+from pathlib import Path
+
+CONFIG_PATH  = Path("/etc/sing-box/config.json")
+BACKUP_DIR   = Path("/etc/sing-box/backups")
+SYSTEMCTL    = "/usr/bin/systemctl"
+SERVICE      = "sing-box.service"
+
+ALLOWED_ACTIONS = {"deploy", "reload", "restart", "stop", "start", "list-backups", "restore"}
+
+SRC_RE    = re.compile(r'^/tmp/singbox-deploy-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.json$')
+BACKUP_RE = re.compile(r'^config_\d{8}_\d{6}\.json$')
+
+
+def die(msg: str, code: int = 1) -> None:
+    print(f"ERROR: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def _load_json(path: Path) -> None:
+    """Raise if path is not valid JSON."""
+    with path.open() as f:
+        json.load(f)
+
+
+def _make_backup() -> Path | None:
+    if not CONFIG_PATH.exists():
+        return None
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    dest = BACKUP_DIR / f"config_{ts}.json"
+    shutil.copy2(CONFIG_PATH, dest)
+    return dest
+
+
+def action_deploy(src: str) -> None:
+    if not SRC_RE.match(src):
+        die(f"Invalid source path: {src!r} — must be /tmp/singbox-deploy-<uuid>.json")
+    src_path = Path(src)
+    if not src_path.is_file():
+        die(f"Source file not found: {src}")
+
+    try:
+        _load_json(src_path)
+    except json.JSONDecodeError as e:
+        die(f"Source is not valid JSON: {e}")
+
+    backup = _make_backup()
+    if backup:
+        print(f"Backup: {backup}")
+
+    shutil.copy2(src_path, CONFIG_PATH)
+    CONFIG_PATH.chmod(0o644)
+    print(f"Deployed to {CONFIG_PATH}")
+
+
+def action_service(cmd: str) -> None:
+    result = subprocess.run(
+        [SYSTEMCTL, cmd, SERVICE],
+        capture_output=True,
+        text=True,
+    )
+    if result.stdout:
+        sys.stdout.write(result.stdout)
+    if result.stderr:
+        sys.stderr.write(result.stderr)
+    if result.returncode != 0:
+        sys.exit(result.returncode)
+
+
+def action_list_backups() -> None:
+    if not BACKUP_DIR.exists():
+        print("[]")
+        return
+    names = sorted(
+        (f.name for f in BACKUP_DIR.iterdir() if BACKUP_RE.match(f.name)),
+        reverse=True,
+    )
+    print(json.dumps(names))
+
+
+def action_restore(name: str) -> None:
+    if not BACKUP_RE.match(name):
+        die(f"Invalid backup name: {name!r} — expected config_YYYYMMDD_HHMMSS.json")
+
+    backup_path = BACKUP_DIR / name
+    if not backup_path.is_file():
+        die(f"Backup not found: {backup_path}")
+
+    try:
+        _load_json(backup_path)
+    except json.JSONDecodeError as e:
+        die(f"Backup is not valid JSON: {e}")
+
+    pre = _make_backup()
+    if pre:
+        print(f"Pre-restore backup: {pre}")
+
+    shutil.copy2(backup_path, CONFIG_PATH)
+    CONFIG_PATH.chmod(0o644)
+    print(f"Restored {name} → {CONFIG_PATH}")
+
+
+def main() -> None:
+    if len(sys.argv) < 2:
+        die("Usage: singbox-manager-helper <action> [arg]")
+
+    action = sys.argv[1]
+    if action not in ALLOWED_ACTIONS:
+        die(f"Unknown action: {action!r}. Allowed: {', '.join(sorted(ALLOWED_ACTIONS))}")
+
+    if action == "deploy":
+        if len(sys.argv) < 3:
+            die("deploy requires <source-path>")
+        action_deploy(sys.argv[2])
+
+    elif action in ("reload", "restart", "stop", "start"):
+        action_service(action)
+
+    elif action == "list-backups":
+        action_list_backups()
+
+    elif action == "restore":
+        if len(sys.argv) < 3:
+            die("restore requires <backup-name>")
+        action_restore(sys.argv[2])
+
+
+if __name__ == "__main__":
+    main()
