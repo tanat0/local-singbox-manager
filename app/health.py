@@ -77,13 +77,25 @@ async def check_https(url: str = "https://www.google.com") -> CheckResult:
         return CheckResult(f"HTTPS {url}", ok=False, latency_ms=None, detail=str(e))
 
 
+_IP_PROVIDERS = [
+    "https://api.ipify.org",
+    "https://ifconfig.me/ip",
+    "https://ipinfo.io/ip",
+]
+
+
 async def check_external_ip() -> tuple[Optional[str], str]:
-    try:
-        async with httpx.AsyncClient(timeout=6.0) as client:
-            r = await client.get("https://api.ipify.org")
-            return r.text.strip(), ""
-    except Exception as e:
-        return None, str(e)
+    async with httpx.AsyncClient(timeout=6.0, follow_redirects=True) as client:
+        for url in _IP_PROVIDERS:
+            try:
+                r = await client.get(url)
+                if r.status_code == 200:
+                    ip = r.text.strip()
+                    if ip:
+                        return ip, ""
+            except Exception:
+                continue
+    return None, "all IP providers unreachable"
 
 
 async def run_health_checks() -> HealthReport:

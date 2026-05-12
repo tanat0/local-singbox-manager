@@ -1,16 +1,26 @@
 from __future__ import annotations
 import asyncio
+import hashlib
 import json
 import os
 import re
 import subprocess
 import uuid as _uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 from app.singbox.validator import validate_config
 
 HELPER_BIN = os.environ.get("HELPER_BIN", "/usr/local/bin/singbox-manager-helper")
+
+# Module-level lock: only one deploy pipeline runs at a time.
+_deploy_lock = asyncio.Lock()
+
+
+def config_hash(config: dict) -> str:
+    """Stable sha256 of the config — keys sorted, no whitespace variance."""
+    canonical = json.dumps(config, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
 
 
 @dataclass
@@ -21,6 +31,7 @@ class DeployResult:
     rolled_back: bool = False
     backup_name: Optional[str] = None
     node_tag: Optional[str] = None
+    config_hash: Optional[str] = None
 
     def user_message(self) -> str:
         if self.success:
@@ -79,10 +90,24 @@ async def deploy_with_rollback(
     node_tag: str,
     health_check: bool = True,
 ) -> DeployResult:
+    if _deploy_lock.locked():
+        return DeployResult(
+            success=False, stage="lock",
+            error="Another deploy is already in progress — try again in a moment",
+        )
+
+    async with _deploy_lock:
+        return await _run_deploy(config, node_tag, health_check)
+
+
+async def _run_deploy(config: dict, node_tag: str, health_check: bool) -> DeployResult:
+    cfg_hash = config_hash(config)
+
     # 1. Validate before touching anything
     ok, err = validate_config(config)
     if not ok:
-        return DeployResult(success=False, stage="validate", error=err)
+        return DeployResult(success=False, stage="validate", error=err,
+                            config_hash=cfg_hash)
 
     # 2. Write temp file and deploy via helper (helper creates the backup)
     tmppath = f"/tmp/singbox-deploy-{_uuid.uuid4()}.json"
@@ -96,7 +121,8 @@ async def deploy_with_rollback(
             os.unlink(tmppath)
 
     if not ok:
-        return DeployResult(success=False, stage="deploy", error=output)
+        return DeployResult(success=False, stage="deploy", error=output,
+                            config_hash=cfg_hash)
 
     backup_name = _extract_backup_name(output)
 
@@ -111,6 +137,7 @@ async def deploy_with_rollback(
         return DeployResult(
             success=False, stage="reload", error=err,
             rolled_back=rolled_back, backup_name=backup_name,
+            config_hash=cfg_hash,
         )
 
     # 4. Health check — wait for service to stabilise, then verify active
@@ -124,9 +151,11 @@ async def deploy_with_rollback(
                 success=False, stage="health",
                 error="sing-box.service not active after restart",
                 rolled_back=rolled_back, backup_name=backup_name,
+                config_hash=cfg_hash,
             )
 
-    return DeployResult(success=True, stage="ok", node_tag=node_tag, backup_name=backup_name)
+    return DeployResult(success=True, stage="ok", node_tag=node_tag,
+                        backup_name=backup_name, config_hash=cfg_hash)
 
 
 def list_backups() -> list[str]:
