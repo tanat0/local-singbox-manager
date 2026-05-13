@@ -43,6 +43,7 @@ nav {
   font-size: 13px; transition: color 0.15s;
 }
 .nav-links a:hover { color: var(--text); }
+.nav-links a.nav-active { color: var(--text); font-weight: 600; }
 
 /* ---- Main ---- */
 main { max-width: 980px; margin: 32px auto; padding: 0 20px 60px; }
@@ -140,3 +141,40 @@ pre.log-output {
 .ip-value { font-family: 'JetBrains Mono',monospace; font-size: 22px; font-weight: 600; color: var(--text); letter-spacing: -0.5px; }
 
 code { font-family: 'JetBrains Mono',monospace; font-size: 12px; color: var(--text-dim); }
+
+/* ---- Button variants ---- */
+.btn-sm { padding: 4px 12px; font-size: 12px; }
+.select-sm {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  color: var(--text); padding: 4px 10px; font-size: 12px; outline: none;
+  cursor: pointer;
+}
+.select-sm:focus { border-color: var(--primary); }
+
+/* ---- Latency charts ---- */
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+}
+.metric-card {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 10px; padding: 14px;
+}
+.metric-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
+.metric-name { font-size: 13px; font-weight: 600; color: var(--text); }
+.metric-sub { font-size: 11px; margin-bottom: 10px; }
+.chart-wrap { position: relative; height: 100px; }
+
+/* ---- HTMX loading spinner ---- */
+.htmx-spinner {
+  display: none;
+  width: 14px; height: 14px; margin-left: 6px;
+  border: 2px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: middle;
+}
+.htmx-request .htmx-spinner { display: inline-block; }
+@keyframes spin { to { transform: rotate(360deg); } }

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text
+from sqlalchemy import Column, Float, Integer, String, Boolean, DateTime, Text
 from sqlalchemy.sql import func
 from app.db import Base
 
@@ -24,6 +24,18 @@ class Settings(Base):
 
     key = Column(String, primary_key=True)
     value = Column(Text, nullable=False)
+
+
+class HealthCheckLog(Base):
+    __tablename__ = "health_check_log"
+
+    id = Column(Integer, primary_key=True)
+    checked_at = Column(DateTime, nullable=False, index=True)
+    check_name = Column(String, nullable=False)
+    category = Column(String, nullable=False, default="connectivity")
+    ok = Column(Boolean, nullable=False)
+    latency_ms = Column(Float(precision=2), nullable=True)
+    detail = Column(Text, nullable=True)
 
 
 class DeployLog(Base):

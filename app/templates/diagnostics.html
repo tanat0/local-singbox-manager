@@ -10,52 +10,69 @@
   {% endif %}
 </div>
 
-<div class="card-grid" style="grid-template-columns: 1fr 1fr">
-
+<div class="card-grid" style="grid-template-columns:1fr 1fr">
   <div class="card">
     <h2>System</h2>
     <div id="sysinfo" hx-get="/api/sysinfo" hx-trigger="load" hx-swap="innerHTML">
       <span class="text-dim">Loading…</span>
     </div>
   </div>
-
   <div class="card">
     <h2>Active Node</h2>
     {% if active_node %}
       {% set parsed = active_node.parsed_json | fromjson %}
-      <div style="font-size:13px;line-height:1.8" class="text-dim">
-        <div>Protocol: <strong>{{ active_node.protocol }}</strong></div>
-        <div>Server: <strong>{{ parsed.server }}:{{ parsed.port }}</strong></div>
-        {% if parsed.sni %}<div>SNI: <strong>{{ parsed.sni }}</strong></div>{% endif %}
-        {% if parsed.security %}<div>Security: <strong>{{ parsed.security }}</strong></div>{% endif %}
+      <div style="font-size:13px;line-height:1.9" class="text-dim">
+        <div>Protocol: <strong style="color:var(--text)">{{ active_node.protocol }}</strong></div>
+        <div>Server: <strong style="color:var(--text)">{{ parsed.server }}:{{ parsed.port }}</strong></div>
+        {% if parsed.sni %}<div>SNI: <strong style="color:var(--text)">{{ parsed.sni }}</strong></div>{% endif %}
+        {% if parsed.security and parsed.security != 'none' %}<div>Security: <strong style="color:var(--text)">{{ parsed.security }}</strong></div>{% endif %}
       </div>
     {% else %}
       <p class="text-dim">No active node. <a href="/nodes">Add one →</a></p>
     {% endif %}
   </div>
-
 </div>
 
 <div class="card">
-  <h2>Tunnel Health</h2>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+    <h2 style="margin:0">Tunnel Health</h2>
+    <button class="btn btn-primary btn-sm"
+            hx-get="/api/health"
+            hx-target="#health-results"
+            hx-swap="innerHTML"
+            hx-indicator=".htmx-spinner">
+      ↻ Run
+    </button>
+  </div>
   <div id="health-results"
        hx-get="/api/health"
        hx-trigger="load"
        hx-swap="innerHTML">
     <span class="text-dim">Running checks…</span>
   </div>
-  <div style="margin-top:14px">
-    <button class="btn btn-primary"
-            hx-get="/api/health"
-            hx-target="#health-results"
-            hx-swap="innerHTML"
-            hx-indicator="#health-results">
-      ↻ Run Again
-    </button>
-  </div>
   <p class="text-dim" style="margin-top:10px;font-size:12px">
     Connectivity checks run through the active TUN — passing confirms end-to-end VPN connectivity.
   </p>
+</div>
+
+<div class="card">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:8px">
+    <h2 style="margin:0">Latency History</h2>
+    <div style="display:flex;gap:8px;align-items:center">
+      <select id="hours-select" class="select-sm" onchange="loadCharts()">
+        <option value="6">Last 6 h</option>
+        <option value="24" selected>Last 24 h</option>
+        <option value="72">Last 3 d</option>
+        <option value="168">Last 7 d</option>
+      </select>
+    </div>
+  </div>
+  <p class="text-dim" style="margin-bottom:14px;font-size:12px">
+    Sampled every 5 min by background task. Data accumulates after first startup.
+  </p>
+  <div id="charts-area">
+    <span class="text-dim">Loading…</span>
+  </div>
 </div>
 
 <div class="card">
@@ -74,4 +91,105 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+const COLORS = ['#7c8cff', '#4ade80', '#60a5fa'];
+let _charts = [];
+
+function shortName(name) {
+  if (name.startsWith('DNS')) return 'DNS';
+  if (name.startsWith('TCP')) return 'TCP';
+  if (name.startsWith('HTTPS')) return 'HTTPS';
+  return name;
+}
+
+function renderCharts(data) {
+  _charts.forEach(c => c.destroy());
+  _charts = [];
+
+  const area = document.getElementById('charts-area');
+  if (!data.series || data.series.length === 0) {
+    area.innerHTML = '<p class="text-dim">No data yet — checks run every 5 minutes after startup.</p>';
+    return;
+  }
+
+  area.innerHTML = '<div class="chart-grid"></div>';
+  const grid = area.querySelector('.chart-grid');
+
+  data.series.forEach((s, i) => {
+    const color = COLORS[i % COLORS.length];
+    const uptime = s.uptime_pct !== null ? s.uptime_pct.toFixed(1) + '%' : '—';
+    const avg = s.avg_ms !== null ? s.avg_ms + ' ms avg' : '';
+    const p95 = s.p95_ms !== null ? ' · ' + s.p95_ms + ' ms p95' : '';
+    const uptimeCls = s.uptime_pct >= 99 ? 'badge-green' : s.uptime_pct >= 90 ? 'badge-warning' : 'badge-red';
+
+    const card = document.createElement('div');
+    card.className = 'metric-card';
+    card.innerHTML =
+      '<div class="metric-header">' +
+        '<span class="metric-name">' + shortName(s.name) + '</span>' +
+        '<span class="badge ' + uptimeCls + '">' + uptime + '</span>' +
+      '</div>' +
+      '<div class="metric-sub text-dim">' + avg + p95 + '</div>' +
+      '<div class="chart-wrap"><canvas></canvas></div>';
+    grid.appendChild(card);
+
+    const labels = s.points.map(p => p.t);
+    const values = s.points.map(p => (p.ok && p.ms !== null) ? p.ms : null);
+
+    const chart = new Chart(card.querySelector('canvas'), {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          data: values,
+          borderColor: color,
+          backgroundColor: color + '18',
+          borderWidth: 1.5,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          fill: true,
+          tension: 0.3,
+          spanGaps: false,
+        }]
+      },
+      options: {
+        animation: false,
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: {
+          callbacks: { label: ctx => ctx.parsed.y !== null ? ctx.parsed.y + ' ms' : 'failed' }
+        }},
+        scales: {
+          x: {
+            ticks: { color: '#6e6e88', font: { size: 10 }, maxTicksLimit: 6, maxRotation: 0 },
+            grid: { color: '#2a2a38' },
+          },
+          y: {
+            min: 0,
+            ticks: { color: '#6e6e88', font: { size: 10 }, callback: v => v + ' ms' },
+            grid: { color: '#2a2a38' },
+          }
+        }
+      }
+    });
+    _charts.push(chart);
+  });
+}
+
+async function loadCharts() {
+  const hours = document.getElementById('hours-select').value;
+  const area = document.getElementById('charts-area');
+  area.innerHTML = '<span class="text-dim">Loading…</span>';
+  try {
+    const resp = await fetch('/api/metrics/latency?hours=' + hours);
+    const data = await resp.json();
+    renderCharts(data);
+  } catch (e) {
+    area.innerHTML = '<span class="text-dim">Failed to load metrics.</span>';
+  }
+}
+
+loadCharts();
+</script>
 {% endblock %}

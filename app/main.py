@@ -1,7 +1,12 @@
 from __future__ import annotations
+import asyncio
 import difflib
 import json
+import os
 import re
+import statistics
+from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 from pathlib import Path
 try:
     from typing import Annotated
@@ -10,7 +15,7 @@ except ImportError:
 from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from markupsafe import escape
@@ -19,9 +24,9 @@ from sqlalchemy.orm import Session
 from alembic import command as alembic_command
 from alembic.config import Config as AlembicConfig
 
-from app.db import get_db
+from app.db import SessionLocal, get_db
 from app.health import run_health_checks, check_external_ip
-from app.models import Node, Settings, DeployLog
+from app.models import Node, Settings, DeployLog, HealthCheckLog
 from app.parsers import parse_url, ParsedNode, VlessNode, Hysteria2Node
 from app.singbox import service as svc
 from app.singbox.deployer import (
@@ -32,15 +37,58 @@ from app.singbox.generator import generate_config, build_outbound
 from app.singbox.routes import ROUTE_PRESETS, DEFAULT_ROUTE_PRESET
 from app.singbox.validator import validate_config
 
+_HEALTH_CHECK_INTERVAL = int(os.environ.get("HEALTH_CHECK_INTERVAL", "300"))
+_HEALTH_RETAIN_DAYS = 7
+
+
 def _run_migrations() -> None:
     ini = Path(__file__).parent.parent / "alembic.ini"
     cfg = AlembicConfig(str(ini))
     alembic_command.upgrade(cfg, "head")
 
 
-_run_migrations()
+async def _health_check_loop() -> None:
+    await asyncio.sleep(15)   # let the server fully start first
+    while True:
+        try:
+            report = await run_health_checks()
+            now = datetime.utcnow()
+            cutoff = now - timedelta(days=_HEALTH_RETAIN_DAYS)
+            db = SessionLocal()
+            try:
+                for c in report.checks:
+                    db.add(HealthCheckLog(
+                        checked_at=now,
+                        check_name=c.name,
+                        category=c.category,
+                        ok=c.ok,
+                        latency_ms=c.latency_ms,
+                        detail=c.detail,
+                    ))
+                db.query(HealthCheckLog).filter(
+                    HealthCheckLog.checked_at < cutoff
+                ).delete()
+                db.commit()
+            finally:
+                db.close()
+        except Exception:
+            pass
+        await asyncio.sleep(_HEALTH_CHECK_INTERVAL)
 
-app = FastAPI(title="Sing-Box Manager", docs_url=None, redoc_url=None)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    _run_migrations()
+    task = asyncio.create_task(_health_check_loop())
+    yield
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+
+app = FastAPI(title="Sing-Box Manager", docs_url=None, redoc_url=None, lifespan=lifespan)
 
 BASE_DIR = Path(__file__).parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
@@ -200,6 +248,53 @@ async def api_sysinfo():
         f'<div>sing-box: <strong>{ver_str}</strong></div>'
         f'</div>'
     )
+
+
+@app.get("/api/metrics/latency")
+async def api_metrics_latency(hours: int = 24, db: Session = Depends(get_db)):
+    hours = min(max(hours, 1), 168)   # clamp 1h–7d
+    cutoff = datetime.utcnow() - timedelta(hours=hours)
+
+    rows = (
+        db.query(HealthCheckLog)
+        .filter(
+            HealthCheckLog.checked_at >= cutoff,
+            HealthCheckLog.category == "connectivity",
+        )
+        .order_by(HealthCheckLog.checked_at)
+        .all()
+    )
+
+    # Group by check name
+    by_name: dict = {}
+    for r in rows:
+        by_name.setdefault(r.check_name, []).append(r)
+
+    series = []
+    for name, checks in by_name.items():
+        total = len(checks)
+        ok_count = sum(1 for c in checks if c.ok)
+        latencies = [c.latency_ms for c in checks if c.ok and c.latency_ms is not None]
+
+        points = []
+        for c in checks:
+            ts = c.checked_at.strftime("%H:%M") if c.checked_at else "?"
+            points.append({
+                "t": ts,
+                "ms": round(c.latency_ms, 1) if c.latency_ms is not None else None,
+                "ok": c.ok,
+            })
+
+        series.append({
+            "name": name,
+            "points": points,
+            "uptime_pct": round(ok_count / total * 100, 1) if total else None,
+            "avg_ms": round(statistics.mean(latencies), 1) if latencies else None,
+            "p95_ms": round(sorted(latencies)[int(len(latencies) * 0.95)], 1) if len(latencies) >= 2 else None,
+            "sample_count": total,
+        })
+
+    return JSONResponse({"hours": hours, "series": series})
 
 
 @app.get("/api/diff", response_class=HTMLResponse)

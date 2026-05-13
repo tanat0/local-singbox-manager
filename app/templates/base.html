@@ -11,16 +11,24 @@
   <nav>
     <a href="/" class="nav-brand">⬡ sing-box</a>
     <div class="nav-links">
-      <a href="/">Dashboard</a>
-      <a href="/nodes">Nodes</a>
-      <a href="/diagnostics">Diagnostics</a>
-      <a href="/logs">Logs</a>
-      <a href="/backups">Backups</a>
-      <a href="/settings">Settings</a>
+      {% set p = request.url.path %}
+      <a href="/"            {% if p == "/" %}class="nav-active"{% endif %}>Dashboard</a>
+      <a href="/nodes"       {% if p.startswith("/nodes") %}class="nav-active"{% endif %}>Nodes</a>
+      <a href="/diagnostics" {% if p.startswith("/diagnostics") %}class="nav-active"{% endif %}>Diagnostics</a>
+      <a href="/logs"        {% if p.startswith("/logs") %}class="nav-active"{% endif %}>Logs</a>
+      <a href="/backups"     {% if p.startswith("/backups") %}class="nav-active"{% endif %}>Backups</a>
+      <a href="/settings"    {% if p.startswith("/settings") %}class="nav-active"{% endif %}>Settings</a>
     </div>
   </nav>
   <main>
     {% block content %}{% endblock %}
   </main>
+  <script>
+    // Auto-dismiss flash alerts after 5 s
+    document.querySelectorAll('.alert').forEach(function(el) {
+      setTimeout(function() { el.style.transition = 'opacity 0.4s'; el.style.opacity = '0'; }, 5000);
+      setTimeout(function() { el.style.display = 'none'; }, 5400);
+    });
+  </script>
 </body>
 </html>
