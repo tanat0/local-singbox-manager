@@ -24,9 +24,15 @@ from sqlalchemy.orm import Session
 from alembic import command as alembic_command
 from alembic.config import Config as AlembicConfig
 
+from app.auth import (
+    AUTH_ENABLED, SESSION_COOKIE, SESSION_MAX_AGE,
+    AuthMiddleware, create_session_token, emit_startup_warnings,
+    rate_limit_ok, verify_password,
+)
 from app.db import SessionLocal, get_db
 from app.health import run_health_checks, check_external_ip
 from app.logging_config import setup_logging, get_logger
+from app.version import VERSION
 
 _log = get_logger(__name__)
 from app.models import Node, Settings, DeployLog, HealthCheckLog
@@ -82,7 +88,8 @@ async def _health_check_loop() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
-    _log.info("Sing-Box Manager starting up")
+    _log.info("Sing-Box Manager v%s starting up", VERSION)
+    emit_startup_warnings()
     _run_migrations()
     task = asyncio.create_task(_health_check_loop())
     yield
@@ -94,13 +101,78 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Sing-Box Manager", docs_url=None, redoc_url=None, lifespan=lifespan)
+app.add_middleware(AuthMiddleware)
 
 BASE_DIR = Path(__file__).parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 templates.env.filters["fromjson"] = json.loads
 templates.env.filters["tojson"] = json.dumps
+templates.env.globals["auth_enabled"] = AUTH_ENABLED
+templates.env.globals["app_version"] = VERSION
 
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+
+
+# ---------------------------------------------------------------------------
+# Health / version probes (always open, no auth required)
+# ---------------------------------------------------------------------------
+
+@app.get("/health")
+async def health_probe():
+    return JSONResponse({"status": "ok", "version": VERSION})
+
+
+@app.get("/version")
+async def version_probe():
+    return JSONResponse({"app": VERSION, "singbox": svc.get_version() or "unknown"})
+
+
+# ---------------------------------------------------------------------------
+# Auth: login / logout
+# ---------------------------------------------------------------------------
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request, next: str = "/"):
+    return templates.TemplateResponse(request, "login.html", {"next": next, "error": ""})
+
+
+@app.post("/login")
+async def login_post(
+    request: Request,
+    password: Annotated[str, Form()],
+    next: Annotated[str, Form()] = "/",
+):
+    ip = request.client.host if request.client else "unknown"
+    if not rate_limit_ok(ip):
+        _log.warning("Login rate-limited for %s", ip)
+        return templates.TemplateResponse(request, "login.html", {
+            "next": next,
+            "error": "Too many attempts — wait 60 seconds and try again.",
+        }, status_code=429)
+
+    if not verify_password(password):
+        _log.warning("Failed login attempt from %s", ip)
+        return templates.TemplateResponse(request, "login.html", {
+            "next": next,
+            "error": "Incorrect password.",
+        }, status_code=401)
+
+    _log.info("Login successful from %s", ip)
+    safe_next = next if (next.startswith("/") and not next.startswith("//")) else "/"
+    response = RedirectResponse(safe_next, status_code=303)
+    response.set_cookie(
+        SESSION_COOKIE, create_session_token(),
+        httponly=True, samesite="strict",
+        max_age=SESSION_MAX_AGE, path="/",
+    )
+    return response
+
+
+@app.post("/logout")
+async def logout_post():
+    response = RedirectResponse("/login", status_code=303)
+    response.delete_cookie(SESSION_COOKIE, path="/")
+    return response
 
 
 # ---------------------------------------------------------------------------

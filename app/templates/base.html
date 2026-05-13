@@ -8,6 +8,14 @@
   <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" defer></script>
 </head>
 <body>
+
+{% if not auth_enabled %}
+<div class="security-banner">
+  <strong>⚠ Panel is unprotected.</strong>
+  Set <code>SINGLE_ADMIN_PASSWORD</code> env var to enable authentication.
+</div>
+{% endif %}
+
   <nav>
     <a href="/" class="nav-brand">⬡ sing-box</a>
     <div class="nav-links">
@@ -19,15 +27,38 @@
       <a href="/backups"     {% if p.startswith("/backups") %}class="nav-active"{% endif %}>Backups</a>
       <a href="/settings"    {% if p.startswith("/settings") %}class="nav-active"{% endif %}>Settings</a>
     </div>
+    {% if auth_enabled %}
+    <form method="post" action="/logout" style="margin:0">
+      <button class="btn btn-outline btn-sm">Logout</button>
+    </form>
+    {% endif %}
   </nav>
+
   <main>
     {% block content %}{% endblock %}
   </main>
+
+  <footer class="app-footer">
+    <span class="text-dim">Sing-Box Manager v{{ app_version }}</span>
+    <span id="footer-singbox-ver"
+          hx-get="/api/sysinfo"
+          hx-trigger="load"
+          hx-swap="innerHTML"
+          style="margin-left:10px"></span>
+  </footer>
+
   <script>
     // Auto-dismiss flash alerts after 5 s
     document.querySelectorAll('.alert').forEach(function(el) {
       setTimeout(function() { el.style.transition = 'opacity 0.4s'; el.style.opacity = '0'; }, 5000);
       setTimeout(function() { el.style.display = 'none'; }, 5400);
+    });
+
+    // Redirect to /login when a session-protected HTMX request returns 401
+    document.addEventListener('htmx:afterRequest', function(evt) {
+      if (evt.detail.xhr && evt.detail.xhr.status === 401) {
+        window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname);
+      }
     });
   </script>
 </body>
