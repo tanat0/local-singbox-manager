@@ -102,6 +102,46 @@ def test_bypass_lan_preset_has_private_ip_rule():
     assert private_rule["outbound"] == "direct"
 
 
+def test_bypass_ru_preset_has_rule_set():
+    cfg = generate_config(parse_vless(VLESS_URL), route_preset="bypass_ru")
+    assert "rule_set" in cfg["route"]
+    tags = {rs["tag"] for rs in cfg["route"]["rule_set"]}
+    assert "geoip-ru" in tags
+    assert "geosite-ru" in tags
+
+
+def test_bypass_ru_rule_set_remote_binary():
+    cfg = generate_config(parse_vless(VLESS_URL), route_preset="bypass_ru")
+    for rs in cfg["route"]["rule_set"]:
+        assert rs["type"] == "remote"
+        assert rs["format"] == "binary"
+        assert rs["url"].endswith(".srs")
+
+
+def test_bypass_ru_has_ruleset_direct_rule():
+    cfg = generate_config(parse_vless(VLESS_URL), route_preset="bypass_ru")
+    ruleset_rule = next(
+        (r for r in cfg["route"]["rules"] if "rule_set" in r), None
+    )
+    assert ruleset_rule is not None
+    assert ruleset_rule["outbound"] == "direct"
+    assert set(ruleset_rule["rule_set"]) == {"geoip-ru", "geosite-ru"}
+
+
+def test_bypass_ru_has_lan_bypass():
+    cfg = generate_config(parse_vless(VLESS_URL), route_preset="bypass_ru")
+    rules = cfg["route"]["rules"]
+    private_rule = next((r for r in rules if r.get("ip_is_private")), None)
+    assert private_rule is not None
+    assert private_rule["outbound"] == "direct"
+
+
+def test_bypass_ru_download_detour_is_direct():
+    cfg = generate_config(parse_vless(VLESS_URL), route_preset="bypass_ru")
+    for rs in cfg["route"]["rule_set"]:
+        assert rs["download_detour"] == "direct"
+
+
 def test_invalid_dns_preset_raises():
     with pytest.raises(ValueError, match="DNS"):
         generate_config(parse_vless(VLESS_URL), dns_preset="nonexistent")

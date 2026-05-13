@@ -50,6 +50,9 @@ def _mock_logs(lines=100):
 def _mock_validate(config):
     return True, "Configuration is valid"
 
+def _mock_version():
+    return "1.13.11"
+
 _patches = [
     patch("app.singbox.deployer._run_helper", side_effect=_mock_helper),
     patch("app.singbox.service._run_helper", side_effect=_mock_helper),
@@ -57,6 +60,8 @@ _patches = [
     patch("app.singbox.deployer.validate_config", side_effect=_mock_validate),
     patch("app.singbox.service.get_status", side_effect=_mock_status),
     patch("app.singbox.service.get_logs", side_effect=_mock_logs),
+    patch("app.singbox.service.get_version", side_effect=_mock_version),
+    patch("app.health.subprocess.run", return_value=type("R", (), {"returncode": 0, "stdout": "state UP\n"})()),
 ]
 for _p in _patches:
     _p.start()

@@ -10,6 +10,32 @@
   {% endif %}
 </div>
 
+<div class="card-grid" style="grid-template-columns: 1fr 1fr">
+
+  <div class="card">
+    <h2>System</h2>
+    <div id="sysinfo" hx-get="/api/sysinfo" hx-trigger="load" hx-swap="innerHTML">
+      <span class="text-dim">Loading…</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Active Node</h2>
+    {% if active_node %}
+      {% set parsed = active_node.parsed_json | fromjson %}
+      <div style="font-size:13px;line-height:1.8" class="text-dim">
+        <div>Protocol: <strong>{{ active_node.protocol }}</strong></div>
+        <div>Server: <strong>{{ parsed.server }}:{{ parsed.port }}</strong></div>
+        {% if parsed.sni %}<div>SNI: <strong>{{ parsed.sni }}</strong></div>{% endif %}
+        {% if parsed.security %}<div>Security: <strong>{{ parsed.security }}</strong></div>{% endif %}
+      </div>
+    {% else %}
+      <p class="text-dim">No active node. <a href="/nodes">Add one →</a></p>
+    {% endif %}
+  </div>
+
+</div>
+
 <div class="card">
   <h2>Tunnel Health</h2>
   <div id="health-results"
@@ -27,8 +53,8 @@
       ↻ Run Again
     </button>
   </div>
-  <p class="text-dim" style="margin-top:10px">
-    Checks run through the active TUN — a passing result confirms end-to-end VPN connectivity.
+  <p class="text-dim" style="margin-top:10px;font-size:12px">
+    Connectivity checks run through the active TUN — passing confirms end-to-end VPN connectivity.
   </p>
 </div>
 

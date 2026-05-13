@@ -1,8 +1,10 @@
 from __future__ import annotations
 import os
+import re
 import subprocess
 
 HELPER_BIN = os.environ.get("HELPER_BIN", "/usr/local/bin/singbox-manager-helper")
+SINGBOX_BIN = os.environ.get("SINGBOX_BIN", "/usr/bin/sing-box")
 
 
 def _run_helper(*args: str, timeout: int = 30) -> tuple[bool, str]:
@@ -79,3 +81,17 @@ def reload_or_restart() -> tuple[bool, str]:
     if ok:
         return ok, out
     return restart()
+
+
+def get_version() -> str:
+    """Return sing-box version string, e.g. '1.13.11'. Empty string on failure."""
+    try:
+        r = subprocess.run(
+            [SINGBOX_BIN, "version"],
+            capture_output=True, text=True, timeout=5,
+        )
+        # Output: "sing-box version 1.13.11\n..."
+        m = re.search(r"sing-box version ([\d.]+)", r.stdout)
+        return m.group(1) if m else r.stdout.splitlines()[0].strip()
+    except Exception:
+        return ""

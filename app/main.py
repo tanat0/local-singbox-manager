@@ -161,16 +161,21 @@ async def api_health():
     report = await run_health_checks()
     cls = {"connected": "badge-green", "degraded": "badge-warning",
            "failed": "badge-red"}.get(report.overall, "badge-gray")
-    rows = []
-    for c in report.checks:
-        sym = "✓" if c.ok else "✗"
-        tr_cls = "check-ok" if c.ok else "check-fail"
-        lat = f"{c.latency_ms:.0f}ms" if c.latency_ms else "—"
-        rows.append(
-            f'<tr class="{tr_cls}"><td>{sym}</td><td>{escape(c.name)}</td>'
-            f'<td class="text-dim">{lat}</td>'
-            f'<td class="text-dim">{escape(c.detail)}</td></tr>'
-        )
+
+    def _rows(checks):
+        parts = []
+        for c in checks:
+            sym = "✓" if c.ok else "✗"
+            tr_cls = "check-ok" if c.ok else "check-fail"
+            lat = f"{c.latency_ms:.0f}ms" if c.latency_ms else "—"
+            parts.append(
+                f'<tr class="{tr_cls}"><td>{sym}</td><td>{escape(c.name)}</td>'
+                f'<td class="text-dim">{lat}</td>'
+                f'<td class="text-dim">{escape(c.detail)}</td></tr>'
+            )
+        return "".join(parts)
+
+    table_head = '<table><thead><tr><th></th><th>Check</th><th>Latency</th><th>Detail</th></tr></thead><tbody>'
     ip_line = (
         f'<div style="margin-top:12px" class="text-dim">'
         f'External IP: <strong>{escape(report.external_ip or "—")}</strong></div>'
@@ -178,8 +183,22 @@ async def api_health():
     return HTMLResponse(
         f'<span class="badge {cls}" style="font-size:14px;margin-bottom:14px;display:inline-block">'
         f'{report.overall.upper()}</span>'
-        f'<table><thead><tr><th></th><th>Check</th><th>Latency</th><th>Detail</th></tr></thead>'
-        f'<tbody>{"".join(rows)}</tbody></table>{ip_line}'
+        f'<p class="text-dim" style="margin:4px 0 10px">System</p>'
+        f'{table_head}{_rows(report.system_checks)}</tbody></table>'
+        f'<p class="text-dim" style="margin:12px 0 10px">Connectivity</p>'
+        f'{table_head}{_rows(report.connectivity_checks)}</tbody></table>'
+        f'{ip_line}'
+    )
+
+
+@app.get("/api/sysinfo", response_class=HTMLResponse)
+async def api_sysinfo():
+    version = svc.get_version()
+    ver_str = escape(version) if version else '<span class="text-dim">unavailable</span>'
+    return HTMLResponse(
+        f'<div class="text-dim" style="font-size:13px;line-height:1.8">'
+        f'<div>sing-box: <strong>{ver_str}</strong></div>'
+        f'</div>'
     )
 
 
