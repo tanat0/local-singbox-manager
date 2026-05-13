@@ -7,11 +7,12 @@ are present for test_activate_node). Restore-flow test is last because
 it clears the active-node flag.
 
 Coverage:
-  Pages:       dashboard, nodes, diagnostics, logs, backups, settings
+  Pages:       dashboard, nodes, diagnostics, logs, backups, settings, profiles
   Node CRUD:   add VLESS, add Hy2, activate, delete, re-add (update)
   Service:     restart, stop, start, validate-config
   Settings:    save, persist, bypass_ru preset available, restore defaults
   Diagnostics: hours selector, latency API clamping
+  Profiles:    page loads, create, activate, delete
   Backups:     list, restore flow
   Import/Export: export JSON, round-trip import
   Nav:         active link highlighted on each page
@@ -226,6 +227,7 @@ def test_api_logs_line_clamp(page: Page, base_url: str):
 @pytest.mark.parametrize("path,label", [
     ("/",            "Dashboard"),
     ("/nodes",       "Nodes"),
+    ("/profiles",    "Profiles"),
     ("/diagnostics", "Diagnostics"),
     ("/logs",        "Logs"),
     ("/backups",     "Backups"),
@@ -335,6 +337,55 @@ def test_add_duplicate_node_shows_updated(page: Page, base_url: str):
     alert = page.locator(".alert-success")
     expect(alert).to_be_visible()
     assert "Updated" in alert.inner_text()
+
+
+# ── Profiles ─────────────────────────────────────────────────────────────────
+
+def test_profiles_page_loads(page: Page, base_url: str):
+    page.goto(base_url + "/profiles")
+    expect(page).to_have_title("Profiles — Sing-Box Manager")
+    expect(page.locator("select[name='node_tag']")).to_be_visible()
+    expect(page.locator("select[name='dns_preset']")).to_be_visible()
+    expect(page.locator("select[name='route_preset']")).to_be_visible()
+
+
+def test_profiles_create(page: Page, base_url: str):
+    page.goto(base_url + "/profiles")
+    page.fill("input[name='name']", "e2e-profile")
+    page.fill("input[name='description']", "E2E test profile")
+    # smoke-hy2 node is in the DB from earlier tests
+    page.select_option("select[name='node_tag']", label="smoke-hy2 (hysteria2)")
+    page.select_option("select[name='dns_preset']", "cloudflare_tls")
+    page.select_option("select[name='route_preset']", "bypass_lan")
+    page.click("button[type='submit']")
+    # Profile should appear in the table
+    expect(page.locator("td >> text=e2e-profile")).to_be_visible()
+
+
+def test_profiles_activate(page: Page, base_url: str):
+    page.goto(base_url + "/profiles")
+    row = page.locator("tr", has=page.locator("td >> text=e2e-profile"))
+    row.locator("button:has-text('Activate')").click()
+    # Activate redirects to dashboard with success msg
+    expect(page.locator(".alert-success")).to_be_visible()
+    # Navigate back to profiles to verify active badge
+    page.goto(base_url + "/profiles")
+    row_after = page.locator("tr", has=page.locator("td >> text=e2e-profile"))
+    expect(row_after.locator(".badge-green")).to_be_visible()
+
+
+def test_profiles_active_shown_on_dashboard(page: Page, base_url: str):
+    page.goto(base_url + "/")
+    expect(page.locator("text=e2e-profile")).to_be_visible()
+
+
+def test_profiles_delete(page: Page, base_url: str):
+    page.goto(base_url + "/profiles")
+    row = page.locator("tr", has=page.locator("td >> text=e2e-profile"))
+    page.on("dialog", lambda d: d.accept())
+    row.locator("button:has-text('Delete')").click()
+    expect(page.locator(".alert-success")).to_be_visible()
+    expect(page.locator("td >> text=e2e-profile")).not_to_be_visible()
 
 
 # ── Backups (restore clears active node — keep last) ─────────────────────────

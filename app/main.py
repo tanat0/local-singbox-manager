@@ -35,7 +35,7 @@ from app.logging_config import setup_logging, get_logger
 from app.version import VERSION
 
 _log = get_logger(__name__)
-from app.models import Node, Settings, DeployLog, HealthCheckLog
+from app.models import Node, Settings, DeployLog, HealthCheckLog, Profile
 from app.parsers import parse_url, ParsedNode, VlessNode, Hysteria2Node
 from app.singbox import service as svc
 from app.singbox.deployer import (
@@ -228,9 +228,11 @@ def _presets(db: Session) -> tuple[str, str]:
 async def dashboard(request: Request, db: Session = Depends(get_db)):
     status = svc.get_status()
     active_node = db.query(Node).filter(Node.active.is_(True)).first()
+    active_profile = db.query(Profile).filter(Profile.active.is_(True)).first()
     return templates.TemplateResponse(request, "dashboard.html", {
         "status": status,
         "active_node": active_node,
+        "active_profile": active_profile,
         "msg": request.query_params.get("msg", ""),
         "msg_type": request.query_params.get("msg_type", "info"),
     })
@@ -502,6 +504,7 @@ async def activate_node(node_id: int, db: Session = Depends(get_db)):
 
     db.query(Node).update({"active": False})
     node.active = True
+    db.query(Profile).update({"active": False})  # direct node activation = off-profile
     db.commit()
     return _redirect("/", msg=result.user_message(), msg_type="success")
 
@@ -642,4 +645,122 @@ async def save_settings(
         return _redirect("/settings", msg=f"Invalid route preset", msg_type="error")
     _set_setting(db, "dns_preset", dns_preset)
     _set_setting(db, "route_preset", route_preset)
+    db.query(Profile).update({"active": False})  # manual settings change = off-profile
+    db.commit()
     return _redirect("/settings", msg="Saved. Re-activate node to apply.", msg_type="success")
+
+
+# ---------------------------------------------------------------------------
+# Profiles
+# ---------------------------------------------------------------------------
+
+@app.get("/profiles", response_class=HTMLResponse)
+async def profiles_page(request: Request, db: Session = Depends(get_db)):
+    profiles = db.query(Profile).order_by(Profile.created_at).all()
+    nodes = db.query(Node).order_by(Node.tag).all()
+    dns_p, route_p = _presets(db)
+    return templates.TemplateResponse(request, "profiles.html", {
+        "profiles": profiles,
+        "nodes": nodes,
+        "dns_presets": DNS_PRESETS,
+        "route_presets": ROUTE_PRESETS,
+        "dns_preset": dns_p,
+        "route_preset": route_p,
+        "msg": request.query_params.get("msg", ""),
+        "msg_type": request.query_params.get("msg_type", "info"),
+    })
+
+
+@app.post("/profiles")
+async def create_profile(
+    name: Annotated[str, Form()],
+    description: Annotated[str, Form()] = "",
+    node_tag: Annotated[str, Form()] = "",
+    dns_preset: Annotated[str, Form()] = "quad9_tls",
+    route_preset: Annotated[str, Form()] = "full_tunnel",
+    db: Session = Depends(get_db),
+):
+    name = name.strip()
+    if not name:
+        return _redirect("/profiles", msg="Profile name is required", msg_type="error")
+    if dns_preset not in DNS_PRESETS:
+        return _redirect("/profiles", msg=f"Invalid DNS preset: {dns_preset!r}", msg_type="error")
+    if route_preset not in ROUTE_PRESETS:
+        return _redirect("/profiles", msg=f"Invalid route preset: {route_preset!r}", msg_type="error")
+    existing = db.query(Profile).filter(Profile.name == name).first()
+    if existing:
+        return _redirect("/profiles", msg=f"Profile '{name}' already exists", msg_type="error")
+    db.add(Profile(
+        name=name,
+        description=description.strip() or None,
+        node_tag=node_tag.strip() or None,
+        dns_preset=dns_preset,
+        route_preset=route_preset,
+        active=False,
+    ))
+    db.commit()
+    return _redirect("/profiles", msg=f"Created profile '{name}'", msg_type="success")
+
+
+@app.post("/profiles/{profile_id}/activate")
+async def activate_profile(profile_id: int, db: Session = Depends(get_db)):
+    profile = db.query(Profile).filter(Profile.id == profile_id).first()
+    if not profile:
+        return _redirect("/profiles", msg="Profile not found", msg_type="error")
+    if not profile.node_tag:
+        return _redirect("/profiles",
+                         msg=f"Profile '{profile.name}' has no node — edit or delete it",
+                         msg_type="error")
+
+    node = db.query(Node).filter(Node.tag == profile.node_tag).first()
+    if not node:
+        return _redirect("/profiles",
+                         msg=f"Node '{profile.node_tag}' no longer exists — update the profile",
+                         msg_type="error")
+
+    try:
+        parsed = _deserialize_node(node)
+    except Exception as e:
+        return _redirect("/profiles", msg=f"Failed to load node: {e}", msg_type="error")
+    try:
+        config = generate_config(parsed,
+                                 dns_preset=profile.dns_preset,
+                                 route_preset=profile.route_preset)
+    except Exception as e:
+        return _redirect("/profiles", msg=f"Config generation failed: {e}", msg_type="error")
+
+    result = await deploy_with_rollback(config, node.tag, health_check=True)
+
+    db.add(DeployLog(
+        node_tag=result.node_tag or node.tag,
+        config_hash=result.config_hash,
+        backup_name=result.backup_name,
+        stage_reached=result.stage,
+        success=result.success,
+        rolled_back=result.rolled_back,
+        error=result.error or None,
+    ))
+
+    if not result.success:
+        db.commit()
+        return _redirect("/profiles", msg=result.user_message(), msg_type="error")
+
+    db.query(Node).update({"active": False})
+    node.active = True
+    db.query(Profile).update({"active": False})
+    profile.active = True
+    _set_setting(db, "dns_preset", profile.dns_preset)
+    _set_setting(db, "route_preset", profile.route_preset)
+    db.commit()
+    return _redirect("/", msg=f"✓ Profile '{profile.name}' activated", msg_type="success")
+
+
+@app.post("/profiles/{profile_id}/delete")
+async def delete_profile(profile_id: int, db: Session = Depends(get_db)):
+    profile = db.query(Profile).filter(Profile.id == profile_id).first()
+    if not profile:
+        return _redirect("/profiles", msg="Profile not found", msg_type="error")
+    name = profile.name
+    db.delete(profile)
+    db.commit()
+    return _redirect("/profiles", msg=f"Deleted profile '{name}'", msg_type="success")

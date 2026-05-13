@@ -42,8 +42,11 @@
         <strong>{{ active_node.tag }}</strong>
       </div>
       <div class="text-dim">{{ parsed.server }}:{{ parsed.port }}</div>
-      {% if parsed.extra_params %}
-        <div class="text-dim" style="margin-top:4px">{{ parsed.extra_params | length }} extra params</div>
+      {% if active_profile %}
+        <div class="text-dim" style="margin-top:6px;font-size:12px">
+          Profile: <strong style="color:var(--text)">{{ active_profile.name }}</strong>
+          &nbsp;·&nbsp;{{ active_profile.dns_preset }}&nbsp;·&nbsp;{{ active_profile.route_preset }}
+        </div>
       {% endif %}
     {% else %}
       <div class="text-dim" style="margin-bottom:12px">No active node.</div>

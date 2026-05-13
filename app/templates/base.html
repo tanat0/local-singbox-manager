@@ -21,6 +21,7 @@
     <div class="nav-links">
       {% set p = request.url.path %}
       <a href="/"            {% if p == "/" %}class="nav-active"{% endif %}>Dashboard</a>
+      <a href="/profiles"    {% if p.startswith("/profiles") %}class="nav-active"{% endif %}>Profiles</a>
       <a href="/nodes"       {% if p.startswith("/nodes") %}class="nav-active"{% endif %}>Nodes</a>
       <a href="/diagnostics" {% if p.startswith("/diagnostics") %}class="nav-active"{% endif %}>Diagnostics</a>
       <a href="/logs"        {% if p.startswith("/logs") %}class="nav-active"{% endif %}>Logs</a>

@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Profiles — Sing-Box Manager{% endblock %}
+{% block content %}
+
+<h1>Profiles</h1>
+
+{% if msg %}
+<div class="alert alert-{{ msg_type }}">{{ msg }}</div>
+{% endif %}
+
+<div class="card">
+  <h2>Create Profile</h2>
+  <form method="post" action="/profiles">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div class="form-group" style="margin:0">
+        <label>Name <span style="color:var(--danger)">*</span></label>
+        <input type="text" name="name" required placeholder="work / gaming / bypass-ru">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Description</label>
+        <input type="text" name="description" placeholder="Optional note">
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:14px">
+      <div class="form-group" style="margin:0">
+        <label>Node</label>
+        <select name="node_tag">
+          <option value="">— no node —</option>
+          {% for node in nodes %}
+          <option value="{{ node.tag }}">{{ node.tag }} ({{ node.protocol }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>DNS Preset</label>
+        <select name="dns_preset">
+          {% for key, preset in dns_presets.items() %}
+          <option value="{{ key }}" {% if key == dns_preset %}selected{% endif %}>{{ preset.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Route Preset</label>
+        <select name="route_preset">
+          {% for key, preset in route_presets.items() %}
+          <option value="{{ key }}" {% if key == route_preset %}selected{% endif %}>{{ preset.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div style="margin-top:14px">
+      <button type="submit" class="btn btn-primary">Create Profile</button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Profiles ({{ profiles | length }})</h2>
+  {% if profiles %}
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Node</th>
+        <th>DNS</th>
+        <th>Route</th>
+        <th>Status</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for profile in profiles %}
+      <tr>
+        <td>
+          <strong>{{ profile.name }}</strong>
+          {% if profile.description %}
+            <div class="text-dim" style="font-size:11px;margin-top:2px">{{ profile.description }}</div>
+          {% endif %}
+        </td>
+        <td class="text-dim">
+          {% if profile.node_tag %}
+            <code>{{ profile.node_tag }}</code>
+          {% else %}
+            <span style="color:var(--warning)">— none —</span>
+          {% endif %}
+        </td>
+        <td class="text-dim">{{ dns_presets[profile.dns_preset].label if profile.dns_preset in dns_presets else profile.dns_preset }}</td>
+        <td class="text-dim">{{ route_presets[profile.route_preset].label if profile.route_preset in route_presets else profile.route_preset }}</td>
+        <td>
+          {% if profile.active %}
+            <span class="badge badge-green">active</span>
+          {% else %}
+            <span class="badge badge-gray">inactive</span>
+          {% endif %}
+        </td>
+        <td>
+          <div class="actions">
+            {% if not profile.active %}
+            <form method="post" action="/profiles/{{ profile.id }}/activate">
+              <button type="submit" class="btn btn-success btn-sm">Activate</button>
+            </form>
+            {% endif %}
+            <form method="post" action="/profiles/{{ profile.id }}/delete"
+                  onsubmit="return confirm('Delete profile {{ profile.name | e }}?')">
+              <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="text-dim">No profiles yet. Create one above to enable quick-switching.</p>
+  {% endif %}
+</div>
+
+<div class="card" style="background:transparent;border-style:dashed">
+  <h2>How profiles work</h2>
+  <p class="text-dim" style="font-size:13px;line-height:1.8">
+    A profile bundles a <strong>node + DNS preset + route preset</strong> into one click.<br>
+    Activating a profile deploys that config through the full pipeline (validate → deploy → reload → health check).<br>
+    Settings and the active node update atomically — no separate steps needed.<br>
+    Switching via <a href="/nodes">Nodes</a> or changing <a href="/settings">Settings</a> manually moves you off-profile.
+  </p>
+</div>
+
+{% endblock %}

@@ -38,6 +38,20 @@ class HealthCheckLog(Base):
     detail = Column(Text, nullable=True)
 
 
+class Profile(Base):
+    __tablename__ = "profiles"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, unique=True, nullable=False)
+    description = Column(Text, nullable=True, default="")
+    # node_tag is a soft reference — no FK so profiles survive node deletion
+    node_tag = Column(String, nullable=True)
+    dns_preset = Column(String, nullable=False, default="quad9_tls")
+    route_preset = Column(String, nullable=False, default="full_tunnel")
+    active = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class DeployLog(Base):
     __tablename__ = "deploy_log"
 
