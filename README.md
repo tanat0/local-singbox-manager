@@ -28,14 +28,19 @@ FastAPI app  127.0.0.1:9090
   ├─ singbox/
   │   ├─ generator   ParsedNode + DNS preset + route preset → config dict
   │   ├─ deployer    validate → deploy → reload → healthcheck → rollback
-  │   │              async.Lock prevents concurrent deploys
-  │   ├─ service     start / stop / restart / reload / status / logs
+  │   │              asyncio.Lock prevents concurrent deploys
+  │   ├─ service     start / stop / restart / reload / status / logs / version
   │   └─ validator   calls `sing-box check` on a temp file (no root)
   │
-  ├─ health.py       async DNS + TCP + HTTPS checks, external IP
+  ├─ health.py       async service + TUN + DNS + TCP + HTTPS checks,
+  │                  external IP via fallback chain; runs every 5 min
   │
-  └─ models.py       Node, Settings, DeployLog (SQLite via SQLAlchemy)
-                     schema managed by Alembic, auto-migrated on startup
+  ├─ logging_config.py  structured logging (INFO for operations,
+  │                     WARNING for degraded/failed conditions, no DEBUG spam)
+  │
+  └─ models.py       Node, Settings, DeployLog, HealthCheckLog
+                     (SQLite via SQLAlchemy; schema managed by Alembic,
+                      auto-migrated on startup)
 
 FastAPI → sudo helper (privileged boundary)
   /usr/local/bin/singbox-manager-helper
@@ -210,6 +215,11 @@ Go to **Settings** to choose:
 |--------|-------|-------------|
 | `full_tunnel` | All traffic through VPN | Default |
 | `bypass_lan` | RFC1918 addresses go direct | Split tunnel for local network |
+| `bypass_ru` | Russian IPs/domains go direct | Route RU traffic locally, rest through VPN |
+
+The `bypass_ru` preset downloads remote `.srs` rule-sets from SagerNet's CDN
+(`geoip-ru.srs`, `geosite-ru.srs`). sing-box fetches them automatically on
+startup and refreshes every 7 days. No local geo database needed.
 
 Changes take effect on the next **Activate**.
 
@@ -231,6 +241,28 @@ in the DB (since the DB is now out of sync with the deployed config).
 - **Export**: Downloads all nodes as JSON (`/api/nodes/export`).
 - **Import**: Paste exported JSON into the import form on the Nodes page.
   Nodes are re-parsed from `raw_url`, so they always use the latest parser.
+
+---
+
+## Health monitoring
+
+A background task runs every 5 minutes (configurable via `HEALTH_CHECK_INTERVAL` env var)
+and stores results in the `health_check_log` table. Data is retained for 7 days.
+
+Checks performed:
+- **Service** — `systemctl is-active sing-box.service`
+- **TUN** — `ip link show singtun0` (UP/DOWN)
+- **DNS** — resolve `google.com` via the system resolver
+- **TCP** — connect to `1.1.1.1:80`
+- **HTTPS** — GET `https://www.google.com`
+- **External IP** — fetched via ipify / ifconfig.me / ipinfo.io (fallback chain)
+
+The **Diagnostics** page shows live results and latency history charts (Chart.js).
+
+```bash
+sqlite3 singbox_manager.db \
+  "SELECT checked_at, check_name, ok, latency_ms FROM health_check_log ORDER BY id DESC LIMIT 20;"
+```
 
 ---
 
@@ -266,18 +298,40 @@ source .venv/bin/activate
 pytest -v
 ```
 
-Covers URL parsers, config generator, DNS/route presets, registry dispatch.
+**127 tests** covering:
 
-### E2e smoke tests (Playwright, no root required)
+| File | Coverage |
+|------|----------|
+| `test_parse_vless.py` | VLESS URL parser edge cases |
+| `test_parse_hysteria2.py` | Hysteria2 URL parser edge cases |
+| `test_generate_config.py` | Config generator — all DNS/route presets |
+| `test_health.py` | Health checks — service, TUN, DNS, TCP, HTTPS, overall |
+| `test_metrics.py` | `/api/metrics/latency` — hours clamping, series, uptime |
+| `test_deployer.py` | config_hash, lock contention, all failure stages, rollback |
+| `test_validator.py` | Binary not found, timeout, invalid config, temp file cleanup |
+| `test_registry.py` | Parser dispatch, unsupported scheme, VLESS/Hy2 param edge cases |
+
+### E2e tests (Playwright, no root required)
 
 ```bash
 source .venv/bin/activate
 pytest tests/e2e --browser chromium -v
 ```
 
-Starts a real uvicorn server on port 19090 with an isolated temp DB and all
-system calls mocked. Tests all pages, node CRUD, activate flow, settings
-persistence, and HTMX partial endpoints.
+**44 tests** — starts a real uvicorn server on port 19090 with an isolated temp
+DB and all system/helper calls mocked. No sing-box binary, no sudo required.
+
+| Area | Tests |
+|------|-------|
+| Pages load | Dashboard, Nodes, Diagnostics, Logs, Backups, Settings |
+| Node CRUD | Add VLESS, add Hy2, activate, delete, re-add (updates) |
+| Service actions | Restart, Stop, Start, Validate Config |
+| Settings | Save, persist, bypass_ru preset, restore defaults |
+| Import/Export | Export JSON, round-trip import without duplicates |
+| Backups | List, restore flow (redirects to dashboard) |
+| Nav active state | Correct link highlighted on each page |
+| API partials | `/api/logs`, `/api/health`, `/api/ip`, `/api/diff`, `/api/sysinfo`, `/api/metrics/latency` |
+| Error cases | Invalid URL, oversized lines param |
 
 ---
 
@@ -285,10 +339,11 @@ persistence, and HTMX partial endpoints.
 
 ```
 app/
-  main.py              FastAPI routes + startup migrations
+  main.py              FastAPI routes + lifespan + background health task
   db.py                SQLite engine, session, Base
-  models.py            Node, Settings, DeployLog
-  health.py            async DNS / TCP / HTTPS checks
+  models.py            Node, Settings, DeployLog, HealthCheckLog
+  health.py            async service/TUN/DNS/TCP/HTTPS checks, external IP
+  logging_config.py    setup_logging(), get_logger() — structured, no spam
   parsers/
     base.py            ParsedNode (Pydantic base model)
     registry.py        @register decorator, parse_url() dispatcher
@@ -297,12 +352,12 @@ app/
   singbox/
     generator.py       build_outbound(), generate_config()
     dns.py             DNS_PRESETS (quad9_tls, cloudflare_tls, google_tls)
-    routes.py          ROUTE_PRESETS (full_tunnel, bypass_lan)
+    routes.py          ROUTE_PRESETS (full_tunnel, bypass_lan, bypass_ru)
     deployer.py        deploy_with_rollback(), config_hash(), DeployResult
-    service.py         start / stop / restart / reload / status / logs
+    service.py         start / stop / restart / reload / status / logs / version
     validator.py       validate_config() — calls sing-box check
   templates/           Jinja2 (dashboard, nodes, logs, backups, diagnostics, settings)
-  static/style.css     Dark theme
+  static/style.css     Dark theme + latency chart styles
 
 migrations/            Alembic migrations
   versions/            Migration scripts
@@ -315,13 +370,19 @@ sudoers.d/
   singbox-manager          Sudoers rule (install to /etc/sudoers.d/)
 
 singbox-manager.service    systemd unit for the web app
+
 tests/
-  test_parse_vless.py
+  test_parse_vless.py      URL parser unit tests
   test_parse_hysteria2.py
-  test_generate_config.py
+  test_generate_config.py  Config generator + preset tests
+  test_health.py           Health check unit tests
+  test_metrics.py          /api/metrics/latency integration tests
+  test_deployer.py         Deploy pipeline unit tests
+  test_validator.py        Validator unit tests
+  test_registry.py         Parser registry + dispatch + edge cases
   e2e/
-    conftest.py            Server fixture + mocks
-    test_smoke.py          20 Playwright smoke tests
+    conftest.py            Uvicorn server fixture + all system mocks
+    test_smoke.py          44 Playwright e2e tests
 ```
 
 ---
@@ -355,6 +416,12 @@ tests/
 
 **"Helper not found at /usr/local/bin/singbox-manager-helper"**
 Run install step 3. Verify: `ls -la /usr/local/bin/singbox-manager-helper`
+
+**"sing-box binary not found … set the SINGBOX_BIN env var"**
+sing-box is not at `/usr/bin/sing-box`. Either install it there or set the env var:
+```bash
+SINGBOX_BIN=/usr/local/bin/sing-box uvicorn app.main:app --host 127.0.0.1 --port 9090
+```
 
 **sudo password prompt or "no password supplied"**
 Check that `/etc/sudoers.d/singbox-manager` exists, is mode 440, and

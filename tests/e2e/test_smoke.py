@@ -1,16 +1,23 @@
 """
 Playwright smoke tests — UI golden paths.
 
+Tests run sequentially against a single shared server + DB session.
+State accumulated across tests (e.g. nodes added in test_add_vless_node
+are present for test_activate_node). Restore-flow test is last because
+it clears the active-node flag.
+
 Coverage:
-  - all main pages load (200, correct title)
-  - add VLESS node
-  - add Hysteria2 node
-  - activate node (full deploy pipeline, mocked)
-  - delete node
-  - logs page loads log output
-  - settings page shows preset selects
-  - backups page renders
-  - HTMX partials: /api/logs, /api/health, /api/diff return HTML
+  Pages:       dashboard, nodes, diagnostics, logs, backups, settings
+  Node CRUD:   add VLESS, add Hy2, activate, delete, re-add (update)
+  Service:     restart, stop, start, validate-config
+  Settings:    save, persist, bypass_ru preset available, restore defaults
+  Diagnostics: hours selector, latency API clamping
+  Backups:     list, restore flow
+  Import/Export: export JSON, round-trip import
+  Nav:         active link highlighted on each page
+  API partials: /api/logs, /api/health, /api/ip, /api/diff,
+                /api/sysinfo, /api/metrics/latency
+  Error cases: invalid URL, oversized lines param
 """
 from __future__ import annotations
 
@@ -178,3 +185,168 @@ def test_add_invalid_url_shows_error(page: Page, base_url: str):
     page.fill("textarea[name='url']", "not-a-valid-url")
     page.click("button[type='submit']")
     expect(page.locator(".alert-error")).to_be_visible()
+
+
+# ── API: sysinfo and metrics ──────────────────────────────────────────────────
+
+def test_api_sysinfo_returns_version(page: Page, base_url: str):
+    response = page.request.get(base_url + "/api/sysinfo")
+    assert response.status == 200
+    assert "1.13.11" in response.text()
+
+
+def test_api_metrics_latency_structure(page: Page, base_url: str):
+    response = page.request.get(base_url + "/api/metrics/latency")
+    assert response.status == 200
+    data = response.json()
+    assert "hours" in data
+    assert "series" in data
+    assert data["hours"] == 24
+    assert isinstance(data["series"], list)
+
+
+def test_api_metrics_hours_clamp_max(page: Page, base_url: str):
+    response = page.request.get(base_url + "/api/metrics/latency?hours=9999")
+    assert response.json()["hours"] == 168
+
+
+def test_api_metrics_hours_clamp_min(page: Page, base_url: str):
+    response = page.request.get(base_url + "/api/metrics/latency?hours=0")
+    assert response.json()["hours"] == 1
+
+
+def test_api_logs_line_clamp(page: Page, base_url: str):
+    response = page.request.get(base_url + "/api/logs?lines=9999")
+    assert response.status == 200
+    assert "<pre" in response.text()
+
+
+# ── Nav active state ──────────────────────────────────────────────────────────
+
+@pytest.mark.parametrize("path,label", [
+    ("/",            "Dashboard"),
+    ("/nodes",       "Nodes"),
+    ("/diagnostics", "Diagnostics"),
+    ("/logs",        "Logs"),
+    ("/backups",     "Backups"),
+    ("/settings",    "Settings"),
+])
+def test_nav_active_link(page: Page, base_url: str, path: str, label: str):
+    page.goto(base_url + path)
+    active = page.locator("nav a.nav-active")
+    expect(active).to_have_text(label)
+
+
+# ── Service actions ───────────────────────────────────────────────────────────
+
+def test_service_restart(page: Page, base_url: str):
+    page.goto(base_url + "/")
+    page.locator("form[action='/service/restart'] button").click()
+    expect(page.locator(".alert-success")).to_be_visible()
+
+
+def test_service_stop(page: Page, base_url: str):
+    page.goto(base_url + "/")
+    page.locator("form[action='/service/stop'] button").click()
+    expect(page.locator(".alert-success")).to_be_visible()
+
+
+def test_service_start(page: Page, base_url: str):
+    page.goto(base_url + "/")
+    page.locator("form[action='/service/start'] button").click()
+    expect(page.locator(".alert-success")).to_be_visible()
+
+
+def test_validate_config_success(page: Page, base_url: str):
+    page.goto(base_url + "/")
+    page.locator("form[action='/validate'] button").click()
+    expect(page.locator(".alert-success")).to_be_visible()
+
+
+# ── Settings extras ───────────────────────────────────────────────────────────
+
+def test_settings_bypass_ru_option_available(page: Page, base_url: str):
+    page.goto(base_url + "/settings")
+    opts = page.locator("select[name='route_preset'] option")
+    values = [opts.nth(i).get_attribute("value") for i in range(opts.count())]
+    assert "bypass_ru" in values
+
+
+def test_settings_restore_defaults(page: Page, base_url: str):
+    page.goto(base_url + "/settings")
+    page.select_option("select[name='dns_preset']", "quad9_tls")
+    page.select_option("select[name='route_preset']", "full_tunnel")
+    page.click("button[type='submit']")
+    expect(page.locator(".alert-success")).to_be_visible()
+    # Verify persisted
+    page.goto(base_url + "/settings")
+    assert page.input_value("select[name='dns_preset']") == "quad9_tls"
+    assert page.input_value("select[name='route_preset']") == "full_tunnel"
+
+
+# ── Diagnostics ───────────────────────────────────────────────────────────────
+
+def test_diagnostics_hours_selector_visible(page: Page, base_url: str):
+    page.goto(base_url + "/diagnostics")
+    expect(page.locator("#hours-select")).to_be_visible()
+
+
+def test_diagnostics_hours_selector_options(page: Page, base_url: str):
+    page.goto(base_url + "/diagnostics")
+    opts = page.locator("#hours-select option")
+    values = [opts.nth(i).get_attribute("value") for i in range(opts.count())]
+    assert "6" in values
+    assert "24" in values
+    assert "168" in values
+
+
+# ── Export / Import ──────────────────────────────────────────────────────────
+
+def test_export_nodes_returns_json_list(page: Page, base_url: str):
+    response = page.request.get(base_url + "/api/nodes/export")
+    assert response.status == 200
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) >= 1
+    assert "raw_url" in data[0]
+    assert "tag" in data[0]
+
+
+def test_import_nodes_round_trip_no_duplicates(page: Page, base_url: str):
+    export_resp = page.request.get(base_url + "/api/nodes/export")
+    export_json = export_resp.text()
+    before_count = len(export_resp.json())
+
+    page.goto(base_url + "/nodes")
+    page.fill("textarea[name='nodes_json']", export_json)
+    page.locator("form[action='/api/nodes/import'] button[type='submit']").click()
+    expect(page.locator(".alert")).to_be_visible()
+
+    page.goto(base_url + "/nodes")
+    assert page.locator("tbody tr").count() == before_count
+
+
+def test_add_duplicate_node_shows_updated(page: Page, base_url: str):
+    # smoke-hy2 is the active node at this point (smoke-vless was deleted).
+    # Re-submitting the same URL should update rather than create.
+    page.goto(base_url + "/nodes")
+    page.fill("textarea[name='url']", HY2_URL)
+    page.click("button[type='submit']")
+    alert = page.locator(".alert-success")
+    expect(alert).to_be_visible()
+    assert "Updated" in alert.inner_text()
+
+
+# ── Backups (restore clears active node — keep last) ─────────────────────────
+
+def test_backups_shows_mock_backup(page: Page, base_url: str):
+    page.goto(base_url + "/backups")
+    expect(page.get_by_text("config_20240101_120000.json")).to_be_visible()
+
+
+def test_backup_restore_redirects_to_dashboard(page: Page, base_url: str):
+    page.goto(base_url + "/backups")
+    page.on("dialog", lambda d: d.accept())
+    page.locator("button:has-text('Restore')").first.click()
+    expect(page).to_have_url(re.compile(r".*/\?msg="))
+    expect(page.locator(".alert-success")).to_be_visible()
