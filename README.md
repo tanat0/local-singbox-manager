@@ -3,13 +3,19 @@
 Local web UI for managing [sing-box](https://sing-box.sagernet.org/) on Manjaro/Arch Linux.
 
 - Paste a proxy URL → parse → validate → deploy with auto-rollback
+- **Profiles** — bundle node + DNS + route into one-click activate
+- **Auth** — optional single-admin password with signed session cookies
+- **Notifications** — desktop popups, Telegram, ntfy.sh on key events
 - Dashboard: service status, external IP, config diff, recent logs
-- DNS and route presets (Quad9/Cloudflare/Google DoT, full tunnel / bypass LAN)
+- DNS and route presets (Quad9/Cloudflare/Google DoT, full tunnel / bypass LAN / bypass RU)
 - Config backups and one-click restore
-- Deploy journal — every deploy attempt is logged to the DB
+- Deploy journal — every attempt logged to DB
+- Health monitoring — background checks every 5 min, latency history charts
 - Binds to **127.0.0.1:9090 only** — no external exposure
 
 **Supported protocols:** `vless://` (Reality / TLS), `hysteria2://`, `hy2://`
+
+**Current version:** 1.2.0 · See [CHANGELOG.md](CHANGELOG.md) for history.
 
 ---
 
@@ -21,26 +27,30 @@ Browser (localhost only)
         ▼
 FastAPI app  127.0.0.1:9090
   │
-  ├─ parsers/        URL → Pydantic model (VlessNode, Hysteria2Node)
-  │                  stored as parsed_json in SQLite — NOT outbound JSON
-  │                  config regenerated dynamically on each activate
+  ├─ auth.py          HMAC-SHA256 signed session cookie, rate limiting, CSRF
+  ├─ notify.py        fire-and-forget notifications (notify-send / Telegram / ntfy)
+  ├─ version.py       VERSION constant
+  │
+  ├─ parsers/         URL → Pydantic model (VlessNode, Hysteria2Node)
+  │                   stored as parsed_json in SQLite — NOT outbound JSON
+  │                   config regenerated dynamically on each activate
   │
   ├─ singbox/
-  │   ├─ generator   ParsedNode + DNS preset + route preset → config dict
-  │   ├─ deployer    validate → deploy → reload → healthcheck → rollback
-  │   │              asyncio.Lock prevents concurrent deploys
-  │   ├─ service     start / stop / restart / reload / status / logs / version
-  │   └─ validator   calls `sing-box check` on a temp file (no root)
+  │   ├─ generator    ParsedNode + DNS preset + route preset → config dict
+  │   ├─ deployer     validate → deploy → reload → healthcheck → rollback
+  │   │               asyncio.Lock prevents concurrent deploys
+  │   ├─ service      start / stop / restart / reload / status / logs / version
+  │   └─ validator    calls `sing-box check` on a temp file (no root)
   │
-  ├─ health.py       async service + TUN + DNS + TCP + HTTPS checks,
-  │                  external IP via fallback chain; runs every 5 min
+  ├─ health.py        async service + TUN + DNS + TCP + HTTPS checks,
+  │                   external IP via fallback chain; runs every 5 min
   │
   ├─ logging_config.py  structured logging (INFO for operations,
   │                     WARNING for degraded/failed conditions, no DEBUG spam)
   │
-  └─ models.py       Node, Settings, DeployLog, HealthCheckLog
-                     (SQLite via SQLAlchemy; schema managed by Alembic,
-                      auto-migrated on startup)
+  └─ models.py        Node, Settings, DeployLog, HealthCheckLog, Profile
+                      (SQLite via SQLAlchemy; schema managed by Alembic,
+                       auto-migrated on startup)
 
 FastAPI → sudo helper (privileged boundary)
   /usr/local/bin/singbox-manager-helper
@@ -90,8 +100,7 @@ playwright install chromium
 ### 3. Install the privileged helper
 
 The helper is the **only** binary that runs as root. It validates all inputs
-and performs only whitelisted operations. Never edit it without reviewing
-the security implications.
+and performs only whitelisted operations.
 
 ```bash
 sudo cp scripts/singbox-manager-helper /usr/local/bin/singbox-manager-helper
@@ -118,7 +127,30 @@ sudo chown root:root /etc/sing-box
 # config.json itself is created on first deploy
 ```
 
-### 6. Run
+### 6. Configure environment (optional but recommended)
+
+Create a `.env` file or set these in your systemd unit / shell:
+
+```bash
+# Auth — panel is open to anyone on localhost if this is not set
+SINGLE_ADMIN_PASSWORD=your-strong-password
+
+# Signs session cookies — generate once and keep. If unset, sessions reset on restart.
+SESSION_SECRET=64-char-hex-string   # openssl rand -hex 32
+
+# Notifications (all optional — leave unset to disable a channel)
+TELEGRAM_BOT_TOKEN=123456:ABC...
+TELEGRAM_CHAT_ID=your-chat-id
+NTFY_TOPIC=singbox-alerts           # uses ntfy.sh by default
+NTFY_SERVER=https://ntfy.myserver.com   # for self-hosted ntfy (optional)
+
+# Tuning
+HEALTH_CHECK_INTERVAL=300    # seconds between background health checks (default 300)
+SINGBOX_BIN=/usr/bin/sing-box
+HELPER_BIN=/usr/local/bin/singbox-manager-helper
+```
+
+### 7. Run
 
 ```bash
 source .venv/bin/activate
@@ -135,7 +167,7 @@ The app runs Alembic migrations automatically on startup — the SQLite database
 ## Run as a systemd service
 
 ```bash
-# Review WorkingDirectory and ExecStart paths in the unit file first
+# Review WorkingDirectory, ExecStart, and Environment= lines in the unit file first
 sudo cp singbox-manager.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now singbox-manager.service
@@ -198,8 +230,19 @@ on any failure after step 2:
    auto-rollback: helper restore <backup> → restart service
 ```
 
-If deploy was interrupted before a backup was created (step 1 or early step 2),
-there is nothing to roll back — your previous config is still in place.
+A notification is sent on success, on each failure stage, and on rollback.
+
+### Profiles
+
+A profile bundles a **node + DNS preset + route preset** into one click.
+
+1. Open **Profiles**, fill in a name and pick a node + presets → **Create Profile**
+2. Click **Activate** on a profile — runs the full deploy pipeline and updates
+   Settings atomically. No separate steps needed.
+3. Switching nodes directly (via Nodes page) or saving Settings manually
+   clears the active profile flag — the UI always reflects real state.
+
+Profiles survive node deletion (soft reference, no FK constraint).
 
 ### DNS and route presets
 
@@ -221,7 +264,7 @@ The `bypass_ru` preset downloads remote `.srs` rule-sets from SagerNet's CDN
 (`geoip-ru.srs`, `geosite-ru.srs`). sing-box fetches them automatically on
 startup and refreshes every 7 days. No local geo database needed.
 
-Changes take effect on the next **Activate**.
+Changes take effect on the next **Activate** (or via a Profile).
 
 ### Config diff
 
@@ -241,6 +284,59 @@ in the DB (since the DB is now out of sync with the deployed config).
 - **Export**: Downloads all nodes as JSON (`/api/nodes/export`).
 - **Import**: Paste exported JSON into the import form on the Nodes page.
   Nodes are re-parsed from `raw_url`, so they always use the latest parser.
+
+---
+
+## Authentication
+
+Auth is **optional**. The panel is open to any user on localhost if
+`SINGLE_ADMIN_PASSWORD` is not set — a large warning banner will be shown.
+
+| Env var | Description |
+|---------|-------------|
+| `SINGLE_ADMIN_PASSWORD` | Enables the login page. Must be set to protect the panel. |
+| `SESSION_SECRET` | Signs session cookies with HMAC-SHA256. Generate once and keep. If unset, an ephemeral random key is used — sessions are invalidated on every restart. |
+
+Sessions are stateless signed cookies (no server-side store). They expire after 30 days.
+
+CSRF protection is via `Origin`/`Referer` header validation — no body parsing needed.
+
+API routes (`/api/*`) return `401 JSON` when unauthenticated. Page routes redirect
+to `/login?next=<path>`. HTMX requests detect 401 in JS and redirect accordingly.
+
+Rate limiting: 5 failed login attempts per IP per 60 seconds, then locked out.
+
+The `/health` and `/version` endpoints are always open (used for monitoring).
+
+---
+
+## Notifications
+
+Three channels, all **best-effort and fire-and-forget** — a failing notification
+channel never blocks the request path.
+
+| Channel | Config | Notes |
+|---------|--------|-------|
+| `notify-send` | None — always attempted | Requires a running desktop session with DBUS |
+| Telegram | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | Messages sent with `parse_mode=HTML` |
+| ntfy.sh | `NTFY_TOPIC` (+ `NTFY_SERVER` for self-hosted) | Priority: default / high / urgent |
+
+**Events:**
+
+| Event | Level | Example message |
+|-------|-------|-----------------|
+| Deploy success | info | ✓ Tunnel active — Node: `my-server` |
+| Deploy fail | critical | ✗ Deploy failed — Stage: health — service not active |
+| Rollback triggered | warning | ↩ Rolled back — Restored `config_20260513_120000.json` |
+| Rollback failed | critical | ⚠ Rollback FAILED — Manual recovery needed |
+| Tunnel degraded | warning | ⚠ Tunnel degraded — Failing: DNS (google.com), TCP 1.1.1.1:80 |
+| Tunnel recovered | info | ✓ Tunnel recovered — All health checks passing |
+| Tunnel failed | critical | ✗ Tunnel failed — All connectivity checks failing |
+
+Health-state notifications fire only on **state transitions** — not every
+background polling tick.
+
+Use **Settings → Notifications → Send Test Notification** to verify your channels.
 
 ---
 
@@ -281,10 +377,9 @@ Every deploy attempt is recorded in the `deploy_log` table:
 | `rolled_back` | Whether auto-rollback was triggered |
 | `error` | Error message if failed |
 
-Query directly with sqlite3 if needed:
-
 ```bash
-sqlite3 singbox_manager.db "SELECT started_at, node_tag, stage_reached, success, rolled_back FROM deploy_log ORDER BY id DESC LIMIT 10;"
+sqlite3 singbox_manager.db \
+  "SELECT started_at, node_tag, stage_reached, success, rolled_back FROM deploy_log ORDER BY id DESC LIMIT 10;"
 ```
 
 ---
@@ -295,10 +390,10 @@ sqlite3 singbox_manager.db "SELECT started_at, node_tag, stage_reached, success,
 
 ```bash
 source .venv/bin/activate
-pytest -v
+pytest tests/ --ignore=tests/e2e -v
 ```
 
-**127 tests** covering:
+**207 tests** covering:
 
 | File | Coverage |
 |------|----------|
@@ -310,6 +405,9 @@ pytest -v
 | `test_deployer.py` | config_hash, lock contention, all failure stages, rollback |
 | `test_validator.py` | Binary not found, timeout, invalid config, temp file cleanup |
 | `test_registry.py` | Parser dispatch, unsupported scheme, VLESS/Hy2 param edge cases |
+| `test_auth.py` | Token roundtrip/expiry, rate limiting, CSRF, HTTP middleware |
+| `test_profiles.py` | Profile CRUD, activate/deactivate, state transitions |
+| `test_notify.py` | All channels, priority mapping, error resilience, fire() scheduling |
 
 ### E2e tests (Playwright, no root required)
 
@@ -318,18 +416,19 @@ source .venv/bin/activate
 pytest tests/e2e --browser chromium -v
 ```
 
-**44 tests** — starts a real uvicorn server on port 19090 with an isolated temp
+**50 tests** — starts a real uvicorn server on port 19090 with an isolated temp
 DB and all system/helper calls mocked. No sing-box binary, no sudo required.
 
 | Area | Tests |
 |------|-------|
-| Pages load | Dashboard, Nodes, Diagnostics, Logs, Backups, Settings |
+| Pages load | Dashboard, Nodes, Profiles, Diagnostics, Logs, Backups, Settings |
 | Node CRUD | Add VLESS, add Hy2, activate, delete, re-add (updates) |
+| Profile CRUD | Create, activate (badge + dashboard card), delete |
 | Service actions | Restart, Stop, Start, Validate Config |
 | Settings | Save, persist, bypass_ru preset, restore defaults |
 | Import/Export | Export JSON, round-trip import without duplicates |
 | Backups | List, restore flow (redirects to dashboard) |
-| Nav active state | Correct link highlighted on each page |
+| Nav active state | Correct link highlighted on each page (7 pages) |
 | API partials | `/api/logs`, `/api/health`, `/api/ip`, `/api/diff`, `/api/sysinfo`, `/api/metrics/latency` |
 | Error cases | Invalid URL, oversized lines param |
 
@@ -340,8 +439,11 @@ DB and all system/helper calls mocked. No sing-box binary, no sudo required.
 ```
 app/
   main.py              FastAPI routes + lifespan + background health task
+  auth.py              Auth middleware, session tokens, rate limiting, CSRF
+  notify.py            Fire-and-forget notifications (notify-send/Telegram/ntfy)
+  version.py           VERSION constant
   db.py                SQLite engine, session, Base
-  models.py            Node, Settings, DeployLog, HealthCheckLog
+  models.py            Node, Settings, DeployLog, HealthCheckLog, Profile
   health.py            async service/TUN/DNS/TCP/HTTPS checks, external IP
   logging_config.py    setup_logging(), get_logger() — structured, no spam
   parsers/
@@ -356,7 +458,8 @@ app/
     deployer.py        deploy_with_rollback(), config_hash(), DeployResult
     service.py         start / stop / restart / reload / status / logs / version
     validator.py       validate_config() — calls sing-box check
-  templates/           Jinja2 (dashboard, nodes, logs, backups, diagnostics, settings)
+  templates/           Jinja2 (dashboard, nodes, profiles, login,
+                                logs, backups, diagnostics, settings)
   static/style.css     Dark theme + latency chart styles
 
 migrations/            Alembic migrations
@@ -372,17 +475,20 @@ sudoers.d/
 singbox-manager.service    systemd unit for the web app
 
 tests/
-  test_parse_vless.py      URL parser unit tests
+  test_parse_vless.py
   test_parse_hysteria2.py
-  test_generate_config.py  Config generator + preset tests
-  test_health.py           Health check unit tests
-  test_metrics.py          /api/metrics/latency integration tests
-  test_deployer.py         Deploy pipeline unit tests
-  test_validator.py        Validator unit tests
-  test_registry.py         Parser registry + dispatch + edge cases
+  test_generate_config.py
+  test_health.py
+  test_metrics.py
+  test_deployer.py
+  test_validator.py
+  test_registry.py
+  test_auth.py
+  test_profiles.py
+  test_notify.py
   e2e/
     conftest.py            Uvicorn server fixture + all system mocks
-    test_smoke.py          44 Playwright e2e tests
+    test_smoke.py          50 Playwright e2e tests
 ```
 
 ---
@@ -392,12 +498,14 @@ tests/
 **What is protected:**
 
 - The web app binds to `127.0.0.1` only — no network exposure.
-- No authentication on the UI — the threat model assumes the local user is trusted.
-  Do not expose port 9090 externally (no reverse proxy without adding auth).
-- Privileged operations (write to `/etc/sing-box/`, control systemd service) go
-  through a single helper binary via a narrow sudoers rule.
-- The helper validates all inputs with regex before acting. It does not use
-  `shell=True` and does not accept arbitrary commands.
+- Set `SINGLE_ADMIN_PASSWORD` to require a login; without it, the panel is open
+  to any local user and a prominent warning banner is shown.
+- Session cookies are HMAC-SHA256 signed with `SESSION_SECRET` — forged tokens
+  are rejected. Sessions expire after 30 days.
+- CSRF protection via `Origin`/`Referer` header validation on all mutating requests.
+- Rate limiting prevents brute-force of the login password.
+- Privileged operations go through a single helper binary via a narrow sudoers rule.
+- The helper validates all inputs and does not use `shell=True`.
 - Config files at `/etc/sing-box/config.json` are readable at mode 0o644 —
   the app reads them directly for diff without sudo.
 
@@ -405,10 +513,10 @@ tests/
 
 - A local attacker with access to your session can activate any stored node
   and restart sing-box. This is intentional — the UI is a management tool.
-- The backup directory is writable only by root. If the helper is compromised,
-  an attacker could write arbitrary configs. Keep the helper binary unmodified.
 - Proxy credentials (passwords, UUIDs) are stored in plaintext in `singbox_manager.db`.
   This is a local pet-project tool — encryption at rest is out of scope.
+- Notification channels (Telegram token, ntfy topic) are stored in env vars —
+  protect your environment from other local users.
 
 ---
 
@@ -418,7 +526,7 @@ tests/
 Run install step 3. Verify: `ls -la /usr/local/bin/singbox-manager-helper`
 
 **"sing-box binary not found … set the SINGBOX_BIN env var"**
-sing-box is not at `/usr/bin/sing-box`. Either install it there or set the env var:
+sing-box is not at `/usr/bin/sing-box`. Either install it there or:
 ```bash
 SINGBOX_BIN=/usr/local/bin/sing-box uvicorn app.main:app --host 127.0.0.1 --port 9090
 ```
@@ -427,6 +535,22 @@ SINGBOX_BIN=/usr/local/bin/sing-box uvicorn app.main:app --host 127.0.0.1 --port
 Check that `/etc/sudoers.d/singbox-manager` exists, is mode 440, and
 `sudo visudo -c` reports OK. Check the username matches.
 
+**Login page appears but I didn't set a password**
+Check startup logs for `NO PASSWORD SET` warning — if `SINGLE_ADMIN_PASSWORD`
+was set somehow (e.g. leftover in your environment), it will enable auth.
+
+**Sessions reset on every restart**
+Set `SESSION_SECRET` to a persistent value: `openssl rand -hex 32`.
+
+**notify-send not working**
+Requires a running desktop session with an active DBUS connection.
+If running as a systemd user service, ensure the service has access to the session bus.
+Check: `notify-send "test" "message"` in your terminal.
+
+**Telegram notifications not arriving**
+Verify `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` are set correctly.
+Send a manual test via Settings → Notifications → Test. Check logs for HTTP errors.
+
 **Deploy fails at 'validate' — sing-box check errors about TUN**
 `sing-box check` may warn about the TUN interface not existing during
 offline validation. This is a warning, not a hard error. If validation
@@ -434,7 +558,7 @@ still fails, the error message shows the actual sing-box output.
 
 **Deploy fails at 'health' — service not active after restart**
 Check `journalctl -u sing-box.service -n 50` for the real error.
-The previous config has been automatically restored.
+The previous config has been automatically restored (and a notification sent).
 
 **Config diff shows changes I didn't make**
 The diff compares the deployed file against what *would be generated now*
