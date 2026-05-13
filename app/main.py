@@ -13,9 +13,12 @@ from fastapi.templating import Jinja2Templates
 from markupsafe import escape
 from sqlalchemy.orm import Session
 
-from app.db import Base, engine, get_db
+from alembic import command as alembic_command
+from alembic.config import Config as AlembicConfig
+
+from app.db import get_db
 from app.health import run_health_checks, check_external_ip
-from app.models import Node, Settings
+from app.models import Node, Settings, DeployLog
 from app.parsers import parse_url, ParsedNode, VlessNode, Hysteria2Node
 from app.singbox import service as svc
 from app.singbox.deployer import (
@@ -26,7 +29,13 @@ from app.singbox.generator import generate_config, build_outbound
 from app.singbox.routes import ROUTE_PRESETS, DEFAULT_ROUTE_PRESET
 from app.singbox.validator import validate_config
 
-Base.metadata.create_all(bind=engine)
+def _run_migrations() -> None:
+    ini = Path(__file__).parent.parent / "alembic.ini"
+    cfg = AlembicConfig(str(ini))
+    alembic_command.upgrade(cfg, "head")
+
+
+_run_migrations()
 
 app = FastAPI(title="Sing-Box Manager", docs_url=None, redoc_url=None)
 
@@ -282,7 +291,18 @@ async def activate_node(node_id: int, db: Session = Depends(get_db)):
 
     result = await deploy_with_rollback(config, node.tag, health_check=True)
 
+    db.add(DeployLog(
+        node_tag=result.node_tag or node.tag,
+        config_hash=result.config_hash,
+        backup_name=result.backup_name,
+        stage_reached=result.stage,
+        success=result.success,
+        rolled_back=result.rolled_back,
+        error=result.error or None,
+    ))
+
     if not result.success:
+        db.commit()
         return _redirect("/nodes", msg=result.user_message(), msg_type="error")
 
     db.query(Node).update({"active": False})
