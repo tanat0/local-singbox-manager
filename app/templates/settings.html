@@ -40,4 +40,67 @@
   </p>
 </div>
 
+<div class="card">
+  <h2>Notifications</h2>
+  <p class="text-dim" style="font-size:13px;margin-bottom:14px">
+    Events: deploy success/fail, rollback, tunnel degraded/recovered.
+  </p>
+
+  <table style="width:100%;font-size:13px">
+    <tbody>
+      <tr>
+        <td style="padding:6px 0;width:120px"><strong>notify-send</strong></td>
+        <td>
+          {% if notify_channels.notify_send %}
+            <span class="badge badge-green">available</span>
+          {% else %}
+            <span class="badge badge-gray">not installed</span>
+          {% endif %}
+        </td>
+        <td class="text-dim">Desktop popups — no config needed</td>
+      </tr>
+      <tr>
+        <td style="padding:6px 0"><strong>Telegram</strong></td>
+        <td>
+          {% if notify_channels.telegram %}
+            <span class="badge badge-green">active</span>
+          {% else %}
+            <span class="badge badge-gray">inactive</span>
+          {% endif %}
+        </td>
+        <td class="text-dim">
+          {% if notify_channels.telegram %}
+            Sending to chat {{ notify_channels.ntfy_topic }}
+          {% else %}
+            Set <code>TELEGRAM_BOT_TOKEN</code> + <code>TELEGRAM_CHAT_ID</code> env vars to enable
+          {% endif %}
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:6px 0"><strong>ntfy.sh</strong></td>
+        <td>
+          {% if notify_channels.ntfy %}
+            <span class="badge badge-green">active</span>
+          {% else %}
+            <span class="badge badge-gray">inactive</span>
+          {% endif %}
+        </td>
+        <td class="text-dim">
+          {% if notify_channels.ntfy %}
+            Topic: <code>{{ notify_channels.ntfy_topic }}</code> on {{ notify_channels.ntfy_server }}
+          {% else %}
+            Set <code>NTFY_TOPIC</code> env var to enable (uses ntfy.sh by default, or <code>NTFY_SERVER</code> for self-hosted)
+          {% endif %}
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div style="margin-top:14px">
+    <form method="post" action="/settings/notify-test">
+      <button type="submit" class="btn btn-outline">Send Test Notification</button>
+    </form>
+  </div>
+</div>
+
 {% endblock %}

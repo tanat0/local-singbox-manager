@@ -32,6 +32,7 @@ from app.auth import (
 from app.db import SessionLocal, get_db
 from app.health import run_health_checks, check_external_ip
 from app.logging_config import setup_logging, get_logger
+from app import notify
 from app.version import VERSION
 
 _log = get_logger(__name__)
@@ -48,6 +49,7 @@ from app.singbox.validator import validate_config
 
 _HEALTH_CHECK_INTERVAL = int(os.environ.get("HEALTH_CHECK_INTERVAL", "300"))
 _HEALTH_RETAIN_DAYS = 7
+_last_health_state: str = "unknown"   # tracks previous overall to detect transitions
 
 
 def _run_migrations() -> None:
@@ -57,6 +59,7 @@ def _run_migrations() -> None:
 
 
 async def _health_check_loop() -> None:
+    global _last_health_state
     await asyncio.sleep(15)   # let the server fully start first
     while True:
         try:
@@ -80,9 +83,26 @@ async def _health_check_loop() -> None:
                 db.commit()
             finally:
                 db.close()
+
+            _notify_health_change(_last_health_state, report.overall, report)
+            _last_health_state = report.overall
         except Exception as e:
             _log.warning("Health check loop error: %s", e, exc_info=True)
         await asyncio.sleep(_HEALTH_CHECK_INTERVAL)
+
+
+def _notify_health_change(prev: str, current: str, report: "HealthReport") -> None:  # type: ignore[name-defined]
+    if prev == current or prev == "unknown":
+        return
+    if current == "connected":
+        notify.fire("✓ Tunnel recovered", "All health checks passing", "info")
+    elif current == "degraded":
+        failing = [c.name for c in report.checks if not c.ok]
+        notify.fire("⚠ Tunnel degraded",
+                    f"Failing: {', '.join(failing)}", "warning")
+    elif current == "failed":
+        notify.fire("✗ Tunnel failed",
+                    "All connectivity checks failing", "critical")
 
 
 @asynccontextmanager
@@ -628,6 +648,7 @@ async def settings_page(request: Request, db: Session = Depends(get_db)):
         "route_preset": route_p,
         "dns_presets": DNS_PRESETS,
         "route_presets": ROUTE_PRESETS,
+        "notify_channels": notify.channels_status(),
         "msg": request.query_params.get("msg", ""),
         "msg_type": request.query_params.get("msg_type", "info"),
     })
@@ -648,6 +669,12 @@ async def save_settings(
     db.query(Profile).update({"active": False})  # manual settings change = off-profile
     db.commit()
     return _redirect("/settings", msg="Saved. Re-activate node to apply.", msg_type="success")
+
+
+@app.post("/settings/notify-test")
+async def notify_test():
+    notify.fire("🔔 Test notification", "Sing-Box Manager notifications are working!", "info")
+    return _redirect("/settings", msg="Test notification sent to all active channels.", msg_type="success")
 
 
 # ---------------------------------------------------------------------------
