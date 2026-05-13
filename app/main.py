@@ -26,6 +26,9 @@ from alembic.config import Config as AlembicConfig
 
 from app.db import SessionLocal, get_db
 from app.health import run_health_checks, check_external_ip
+from app.logging_config import setup_logging, get_logger
+
+_log = get_logger(__name__)
 from app.models import Node, Settings, DeployLog, HealthCheckLog
 from app.parsers import parse_url, ParsedNode, VlessNode, Hysteria2Node
 from app.singbox import service as svc
@@ -71,13 +74,15 @@ async def _health_check_loop() -> None:
                 db.commit()
             finally:
                 db.close()
-        except Exception:
-            pass
+        except Exception as e:
+            _log.warning("Health check loop error: %s", e, exc_info=True)
         await asyncio.sleep(_HEALTH_CHECK_INTERVAL)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    setup_logging()
+    _log.info("Sing-Box Manager starting up")
     _run_migrations()
     task = asyncio.create_task(_health_check_loop())
     yield
@@ -130,7 +135,10 @@ def _deserialize_node(node: Node) -> ParsedNode:
         return VlessNode.model_validate(data)
     if proto in ("hysteria2", "hy2"):
         return Hysteria2Node.model_validate(data)
-    raise ValueError(f"Unknown protocol in DB: {proto!r}")
+    raise ValueError(
+        f"Unknown protocol {proto!r} stored for node '{node.tag}' — "
+        "delete and re-add this node from /nodes"
+    )
 
 
 def _presets(db: Session) -> tuple[str, str]:

@@ -8,6 +8,10 @@ from typing import List, Optional
 
 import httpx
 
+from app.logging_config import get_logger
+
+_log = get_logger(__name__)
+
 
 @dataclass
 class CheckResult:
@@ -184,5 +188,9 @@ async def run_health_checks() -> HealthReport:
         overall = "degraded"
     else:
         overall = "failed"
+
+    if overall != "connected":
+        failed_names = [c.name for c in checks if not c.ok]
+        _log.warning("Health %s — failing: %s", overall, ", ".join(failed_names))
 
     return HealthReport(overall=overall, checks=checks, external_ip=ip)

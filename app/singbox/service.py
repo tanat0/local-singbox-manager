@@ -3,8 +3,12 @@ import os
 import re
 import subprocess
 
+from app.logging_config import get_logger
+
 HELPER_BIN = os.environ.get("HELPER_BIN", "/usr/local/bin/singbox-manager-helper")
 SINGBOX_BIN = os.environ.get("SINGBOX_BIN", "/usr/bin/sing-box")
+
+_log = get_logger(__name__)
 
 
 def _run_helper(*args: str, timeout: int = 30) -> tuple[bool, str]:
@@ -59,28 +63,46 @@ def get_logs(lines: int = 100) -> str:
         return f"Error fetching logs: {e}"
 
 
+def _log_action(action: str, ok: bool, out: str) -> None:
+    if ok:
+        _log.info("Service %s: OK", action)
+    else:
+        _log.warning("Service %s failed: %s", action, out)
+
+
 def reload() -> tuple[bool, str]:
     """Try systemctl reload (requires ExecReload in unit). Returns (ok, output)."""
-    return _run_helper("reload")
+    ok, out = _run_helper("reload")
+    _log_action("reload", ok, out)
+    return ok, out
 
 
 def restart() -> tuple[bool, str]:
-    return _run_helper("restart")
+    ok, out = _run_helper("restart")
+    _log_action("restart", ok, out)
+    return ok, out
 
 
 def stop() -> tuple[bool, str]:
-    return _run_helper("stop")
+    ok, out = _run_helper("stop")
+    _log_action("stop", ok, out)
+    return ok, out
 
 
 def start() -> tuple[bool, str]:
-    return _run_helper("start")
+    ok, out = _run_helper("start")
+    _log_action("start", ok, out)
+    return ok, out
 
 
 def reload_or_restart() -> tuple[bool, str]:
-    ok, out = reload()
+    ok, out = _run_helper("reload")
     if ok:
+        _log_action("reload", ok, out)
         return ok, out
-    return restart()
+    ok, out = _run_helper("restart")
+    _log_action("restart", ok, out)
+    return ok, out
 
 
 def get_version() -> str:

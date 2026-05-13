@@ -9,7 +9,10 @@ import uuid as _uuid
 from dataclasses import dataclass
 from typing import Optional
 
+from app.logging_config import get_logger
 from app.singbox.validator import validate_config
+
+_log = get_logger(__name__)
 
 HELPER_BIN = os.environ.get("HELPER_BIN", "/usr/local/bin/singbox-manager-helper")
 
@@ -78,10 +81,13 @@ def _service_is_active() -> bool:
 
 
 def _do_rollback(backup_name: str) -> tuple[bool, str]:
+    _log.warning("Rolling back: restoring %s", backup_name)
     ok, out = _run_helper("restore", backup_name)
     if not ok:
+        _log.error("Rollback FAILED for %s: %s", backup_name, out)
         return False, f"restore failed: {out}"
     _run_helper("restart")   # best-effort restart after rollback
+    _log.info("Rollback successful: restored %s", backup_name)
     return True, out
 
 
@@ -102,10 +108,12 @@ async def deploy_with_rollback(
 
 async def _run_deploy(config: dict, node_tag: str, health_check: bool) -> DeployResult:
     cfg_hash = config_hash(config)
+    _log.info("Deploy starting: node=%s hash=%.8s", node_tag, cfg_hash)
 
     # 1. Validate before touching anything
     ok, err = validate_config(config)
     if not ok:
+        _log.warning("Deploy aborted — config invalid: %s", err)
         return DeployResult(success=False, stage="validate", error=err,
                             config_hash=cfg_hash)
 
@@ -121,6 +129,7 @@ async def _run_deploy(config: dict, node_tag: str, health_check: bool) -> Deploy
             os.unlink(tmppath)
 
     if not ok:
+        _log.warning("Deploy failed at 'deploy' stage: %s", output)
         return DeployResult(success=False, stage="deploy", error=output,
                             config_hash=cfg_hash)
 
@@ -131,6 +140,7 @@ async def _run_deploy(config: dict, node_tag: str, health_check: bool) -> Deploy
     if not ok:
         ok, err = _run_helper("restart")  # fallback if ExecReload not configured
     if not ok:
+        _log.warning("Service reload/restart failed: %s", err)
         rolled_back = False
         if backup_name:
             rolled_back, _ = _do_rollback(backup_name)
@@ -144,6 +154,7 @@ async def _run_deploy(config: dict, node_tag: str, health_check: bool) -> Deploy
     if health_check:
         await asyncio.sleep(3)
         if not _service_is_active():
+            _log.warning("Health check failed: sing-box.service not active after restart")
             rolled_back = False
             if backup_name:
                 rolled_back, _ = _do_rollback(backup_name)
@@ -154,6 +165,7 @@ async def _run_deploy(config: dict, node_tag: str, health_check: bool) -> Deploy
                 config_hash=cfg_hash,
             )
 
+    _log.info("Deploy successful: node=%s backup=%s", node_tag, backup_name)
     return DeployResult(success=True, stage="ok", node_tag=node_tag,
                         backup_name=backup_name, config_hash=cfg_hash)
 

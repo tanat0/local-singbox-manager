@@ -26,7 +26,10 @@ def validate_config(config: dict) -> tuple[bool, str]:
     except subprocess.TimeoutExpired:
         return False, "sing-box check timed out after 15s"
     except FileNotFoundError:
-        return False, f"sing-box binary not found at {SINGBOX_BIN}"
+        return False, (
+            f"sing-box binary not found at {SINGBOX_BIN} — "
+            "install sing-box or set the SINGBOX_BIN env var to its path"
+        )
     except Exception as e:
         return False, str(e)
     finally:
