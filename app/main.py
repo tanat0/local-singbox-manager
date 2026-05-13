@@ -3,7 +3,10 @@ import difflib
 import json
 import re
 from pathlib import Path
-from typing import Annotated
+try:
+    from typing import Annotated
+except ImportError:
+    from typing_extensions import Annotated  # type: ignore[assignment]
 from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, Form, Request
@@ -97,8 +100,7 @@ def _presets(db: Session) -> tuple[str, str]:
 async def dashboard(request: Request, db: Session = Depends(get_db)):
     status = svc.get_status()
     active_node = db.query(Node).filter(Node.active.is_(True)).first()
-    return templates.TemplateResponse("dashboard.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "dashboard.html", {
         "status": status,
         "active_node": active_node,
         "msg": request.query_params.get("msg", ""),
@@ -227,8 +229,7 @@ async def api_diff(db: Session = Depends(get_db)):
 @app.get("/nodes", response_class=HTMLResponse)
 async def nodes_page(request: Request, db: Session = Depends(get_db)):
     nodes = db.query(Node).order_by(Node.created_at.desc()).all()
-    return templates.TemplateResponse("nodes.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "nodes.html", {
         "nodes": nodes,
         "msg": request.query_params.get("msg", ""),
         "msg_type": request.query_params.get("msg_type", "info"),
@@ -374,8 +375,7 @@ async def logs_page(request: Request):
         lines = min(int(request.query_params.get("lines", "100")), 500)
     except ValueError:
         lines = 100
-    return templates.TemplateResponse("logs.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "logs.html", {
         "log_text": svc.get_logs(lines),
         "lines": lines,
     })
@@ -388,8 +388,7 @@ async def logs_page(request: Request):
 @app.get("/diagnostics", response_class=HTMLResponse)
 async def diagnostics_page(request: Request, db: Session = Depends(get_db)):
     active_node = db.query(Node).filter(Node.active.is_(True)).first()
-    return templates.TemplateResponse("diagnostics.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "diagnostics.html", {
         "active_node": active_node,
     })
 
@@ -400,8 +399,7 @@ async def diagnostics_page(request: Request, db: Session = Depends(get_db)):
 
 @app.get("/backups", response_class=HTMLResponse)
 async def backups_page(request: Request):
-    return templates.TemplateResponse("backups.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "backups.html", {
         "backups": list_backups(),
         "msg": request.query_params.get("msg", ""),
         "msg_type": request.query_params.get("msg_type", "info"),
@@ -428,8 +426,7 @@ async def restore_backup_route(name: str, db: Session = Depends(get_db)):
 @app.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request, db: Session = Depends(get_db)):
     dns_p, route_p = _presets(db)
-    return templates.TemplateResponse("settings.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "settings.html", {
         "dns_preset": dns_p,
         "route_preset": route_p,
         "dns_presets": DNS_PRESETS,
