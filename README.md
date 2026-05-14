@@ -70,7 +70,7 @@ FastAPI → sudo helper (privileged boundary)
 ## Prerequisites
 
 - sing-box ≥ 1.13 at `/usr/bin/sing-box`, running as `sing-box.service`
-- Python ≥ 3.8 (tested on 3.8.18 and 3.11)
+- Python 3.8+ supported, 3.11 recommended (tested on 3.8.18 and 3.11)
 - A user account that will run the web app (default: `nikita` — change in sudoers if different)
 
 ---
@@ -192,13 +192,21 @@ pip install -r requirements.txt   # picks up any new deps
 The v1 schema stored `outbound_json` (generated sing-box JSON). v2 stores
 `parsed_json` (raw parsed fields) and regenerates config dynamically.
 
-These schemas are incompatible. Delete the old database before starting:
+These schemas are incompatible. Before deleting the database, export your nodes
+if the old UI is still accessible:
+
+```bash
+curl http://127.0.0.1:9090/api/nodes/export > nodes_backup.json
+```
+
+Then delete the database and restart:
 
 ```bash
 rm singbox_manager.db
 ```
 
-Your proxy URLs are not lost — re-add them from the **Nodes** page.
+After starting with the new schema, re-import from the **Nodes** page
+(paste the exported JSON into the import form).
 Alembic will create a fresh database with the v2 schema on next startup.
 
 ---
@@ -223,7 +231,8 @@ Click **Activate** on any node. The pipeline runs:
 1. validate     sing-box check on a temp file (no root, read-only)
 2. deploy       helper: backup current config → install new config
 3. reload       systemctl reload (falls back to restart if not configured)
-4. health       wait 3s → check service is active
+4. health       wait 3s → systemctl is-active sing-box.service
+                (lightweight check — not the full diagnostics suite)
 5. ok           mark node active in DB, log to DeployLog
 
 on any failure after step 2:
@@ -292,6 +301,10 @@ in the DB (since the DB is now out of sync with the deployed config).
 Auth is **optional**. The panel is open to any user on localhost if
 `SINGLE_ADMIN_PASSWORD` is not set — a large warning banner will be shown.
 
+> **Important:** do not expose the panel through a reverse proxy without setting
+> a password first. The `127.0.0.1`-only bind protects against remote access,
+> but a reverse proxy removes that protection.
+
 | Env var | Description |
 |---------|-------------|
 | `SINGLE_ADMIN_PASSWORD` | Enables the login page. Must be set to protect the panel. |
@@ -317,7 +330,7 @@ channel never blocks the request path.
 
 | Channel | Config | Notes |
 |---------|--------|-------|
-| `notify-send` | None — always attempted | Requires a running desktop session with DBUS |
+| `notify-send` | None — always attempted (best effort) | Requires a desktop session with DBUS; silently skipped if unavailable or running headless |
 | Telegram | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | Messages sent with `parse_mode=HTML` |
 | ntfy.sh | `NTFY_TOPIC` (+ `NTFY_SERVER` for self-hosted) | Priority: default / high / urgent |
 
