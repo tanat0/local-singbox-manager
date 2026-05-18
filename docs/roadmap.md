@@ -34,6 +34,7 @@ The project stays local-client focused first: stable deploys, clear logs, mainta
   - `/config`: get assigned config or proxy.
   - `/status`: basic availability check.
   - `/refresh`: request the latest assigned config.
+- Track each config delivery attempt for audit and future rate limits.
 - Notify users when their assigned configuration changes.
 - Separate personal/admin nodes from user-visible nodes.
 - For Telegram proxy, provide clickable `tg://proxy` links where applicable.

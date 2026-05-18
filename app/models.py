@@ -106,3 +106,16 @@ class ManagedUser(Base):
     config_group_id = Column(Integer, ForeignKey("config_groups.id"), nullable=True)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class ConfigDeliveryLog(Base):
+    __tablename__ = "config_delivery_log"
+
+    id = Column(Integer, primary_key=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    managed_user_id = Column(Integer, ForeignKey("managed_users.id"), nullable=True)
+    telegram_id = Column(String, nullable=False)
+    config_group_id = Column(Integer, ForeignKey("config_groups.id"), nullable=True)
+    action = Column(String, nullable=False)
+    success = Column(Boolean, nullable=False)
+    detail = Column(Text, nullable=True)

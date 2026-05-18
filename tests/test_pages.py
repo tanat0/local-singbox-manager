@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+import uuid
 from pathlib import Path
 from unittest.mock import patch
 
@@ -81,8 +82,11 @@ def test_health_and_version_probes(client):
 
 
 def test_users_create_group_and_user(client):
+    suffix = uuid.uuid4().hex[:8]
+    group_name = f"family-{suffix}"
+    telegram_id = f"123456789{suffix}"
     group_resp = client.post("/users/groups", data={
-        "name": "family",
+        "name": group_name,
         "description": "Family configs",
         "node_tags": "node-a, node-b",
         "notes": "limited access",
@@ -90,10 +94,10 @@ def test_users_create_group_and_user(client):
     }, follow_redirects=True)
     assert group_resp.status_code == 200
     assert b"Created group" in group_resp.content
-    assert b"family" in group_resp.content
+    assert group_name.encode() in group_resp.content
 
     user_resp = client.post("/users", data={
-        "telegram_id": "123456789",
+        "telegram_id": telegram_id,
         "display_name": "Alex",
         "config_group_id": "",
         "notes": "test user",
@@ -101,4 +105,4 @@ def test_users_create_group_and_user(client):
     }, follow_redirects=True)
     assert user_resp.status_code == 200
     assert b"Created user" in user_resp.content
-    assert b"123456789" in user_resp.content
+    assert telegram_id.encode() in user_resp.content

@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app import telegram_admin as tg
+from app.services.distribution import UserAssignment
 
 
 def test_parse_admin_ids_accepts_commas_and_semicolons():
@@ -30,7 +31,10 @@ def test_is_enabled_requires_token_and_admin_ids():
 @pytest.mark.asyncio
 async def test_handle_message_rejects_unknown_user():
     db = MagicMock()
+    assignment = UserAssignment(user=None, group=None, nodes=[], error="User is not registered.")
     with patch.object(tg, "_session", return_value=db), \
+         patch("app.services.distribution.get_user_assignment", return_value=assignment), \
+         patch("app.services.distribution.record_delivery"), \
          patch.object(tg, "_log_admin_action") as log_action:
         response = await tg.handle_message(
             {"from": {"id": 99}, "chat": {"id": 99}, "text": "/status"},
@@ -39,6 +43,47 @@ async def test_handle_message_rejects_unknown_user():
     assert response == "Access denied."
     assert log_action.called
     assert db.close.called
+
+
+@pytest.mark.asyncio
+async def test_handle_message_user_config():
+    user = MagicMock(id=1, telegram_id="99", display_name="Alex")
+    group = MagicMock(id=2, name="family")
+    node = MagicMock(tag="node-a", protocol="vless", raw_url="vless://example")
+    assignment = UserAssignment(user=user, group=group, nodes=[node])
+    db = MagicMock()
+
+    with patch.object(tg, "_session", return_value=db), \
+         patch("app.services.distribution.get_user_assignment", return_value=assignment), \
+         patch("app.services.distribution.record_delivery") as record_delivery:
+        response = await tg.handle_message(
+            {"from": {"id": 99}, "chat": {"id": 99}, "text": "/config"},
+            admin_ids={42},
+        )
+
+    assert response is not None
+    assert "vless://example" in response
+    assert "node-a" in response
+    assert record_delivery.called
+    assert db.close.called
+
+
+@pytest.mark.asyncio
+async def test_handle_message_unregistered_user_denied():
+    assignment = UserAssignment(user=None, group=None, nodes=[], error="User is not registered.")
+    db = MagicMock()
+
+    with patch.object(tg, "_session", return_value=db), \
+         patch("app.services.distribution.get_user_assignment", return_value=assignment), \
+         patch("app.services.distribution.record_delivery"), \
+         patch.object(tg, "_log_admin_action") as log_action:
+        response = await tg.handle_message(
+            {"from": {"id": 77}, "chat": {"id": 77}, "text": "/config"},
+            admin_ids={42},
+        )
+
+    assert response == "Access denied."
+    assert log_action.called
 
 
 @pytest.mark.asyncio

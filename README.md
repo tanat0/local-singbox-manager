@@ -410,16 +410,29 @@ actions are written to `admin_action_log`. The bot reuses the same deploy
 pipeline as the web UI: validation, restart, health check, rollback, deploy log,
 and notifications.
 
+Managed non-admin users can use a smaller command set when their Telegram ID is
+enabled on the **Users** page and assigned to an enabled config group:
+
+```text
+/status
+/config
+/refresh
+```
+
+`/config` and `/refresh` return the raw proxy URLs assigned through the user's
+config group. Each attempt is written to `config_delivery_log` for later rate
+limits and audit.
+
 ## User Distribution Groundwork
 
 The **Users** page stores config groups and managed Telegram user IDs for the
-future user-facing bot flow. It does not send configs yet.
+user-facing bot flow.
 
 - Config groups contain a name, enabled flag, allowed node tags, and notes.
 - Managed users contain Telegram ID, display name, enabled flag, assigned group,
   and notes.
-- Later `/config` and `/refresh` commands will use this data to decide what a
-  non-admin user may receive.
+- User-facing `/config`, `/refresh`, and `/status` commands use this data to
+  decide what a non-admin user may receive.
 
 **Events:**
 

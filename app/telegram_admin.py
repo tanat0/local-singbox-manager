@@ -194,9 +194,59 @@ async def _handle_admin_command(message: Dict[str, Any], command: str, arg: str)
         db.close()
 
 
+async def _handle_user_command(message: Dict[str, Any], command: str) -> Tuple[bool, str]:
+    actor = str(_actor_id(message) or "unknown")
+    from app.services.distribution import (
+        format_user_configs,
+        format_user_status,
+        get_user_assignment,
+        record_delivery,
+    )
+
+    db = _session()
+    try:
+        assignment = get_user_assignment(db, actor)
+        if assignment.user is None:
+            record_delivery(db, actor, command or "unknown", False, assignment, assignment.error or "access denied")
+            return False, "Access denied."
+
+        if command in {"/start", "/help"}:
+            if assignment.error:
+                record_delivery(db, actor, command, False, assignment, assignment.error)
+                return False, assignment.error
+            record_delivery(db, actor, command, True, assignment, "help requested")
+            return True, "Commands:\n/status\n/config\n/refresh"
+
+        if command == "/status":
+            ok = not bool(assignment.error)
+            text = format_user_status(assignment)
+            record_delivery(db, actor, command, ok, assignment, assignment.error or "status requested")
+            return ok, text
+
+        if command in {"/config", "/refresh"}:
+            ok = not bool(assignment.error)
+            text = format_user_configs(assignment)
+            detail = assignment.error or f"{len(assignment.nodes)} config(s) delivered"
+            record_delivery(db, actor, command, ok, assignment, detail)
+            return ok, text
+
+        if assignment.user:
+            record_delivery(db, actor, command or "unknown", False, assignment, "unknown command")
+        return False, "Unknown command. Use /help."
+    finally:
+        db.close()
+
+
 async def handle_message(message: Dict[str, Any], admin_ids: Set[int]) -> Optional[str]:
     actor = _actor_id(message)
+    command, arg = _command_parts(message.get("text", ""))
+    if not command:
+        return None
+
     if actor not in admin_ids:
+        ok, response = await _handle_user_command(message, command)
+        if ok or response != "Access denied.":
+            return response
         db = _session()
         try:
             _log_admin_action(db, str(actor or "unknown"), "unauthorized", False, "access denied")
@@ -204,9 +254,6 @@ async def handle_message(message: Dict[str, Any], admin_ids: Set[int]) -> Option
             db.close()
         return "Access denied."
 
-    command, arg = _command_parts(message.get("text", ""))
-    if not command:
-        return None
     _, response = await _handle_admin_command(message, command, arg)
     return response
 
