@@ -6,6 +6,10 @@ import pytest
 
 from app import telegram_admin as tg
 from app.services.distribution import UserAssignment
+from app.telegram.client import TelegramApiClient
+from app.telegram.dispatcher import TelegramDispatcher
+from app.telegram.handlers import AdminCommandHandler, AdminHandlerDeps, UserCommandHandler, UserHandlerDeps
+from app.telegram.types import BotResponse, ParsedCommand, TelegramMessage
 
 
 def test_parse_admin_ids_accepts_commas_and_semicolons():
@@ -29,108 +33,132 @@ def test_is_enabled_requires_token_and_admin_ids():
 
 
 @pytest.mark.asyncio
-async def test_handle_message_rejects_unknown_user():
-    db = MagicMock()
-    assignment = UserAssignment(user=None, group=None, nodes=[], error="User is not registered.")
-    with patch.object(tg, "_session", return_value=db), \
-         patch("app.services.distribution.get_user_assignment", return_value=assignment), \
-         patch("app.services.distribution.record_delivery"), \
-         patch.object(tg, "_log_admin_action") as log_action:
-        response = await tg.handle_message(
-            {"from": {"id": 99}, "chat": {"id": 99}, "text": "/status"},
-            admin_ids={42},
-        )
-    assert response == "Access denied."
-    assert log_action.called
-    assert db.close.called
+async def test_dispatcher_routes_admin():
+    admin_handler = MagicMock()
+    admin_handler.handle = AsyncMock(return_value=BotResponse(True, "admin ok"))
+    user_handler = MagicMock()
+    user_handler.handle = AsyncMock(return_value=BotResponse(True, "user ok"))
+    dispatcher = TelegramDispatcher({42}, admin_handler, user_handler)
+
+    response = await dispatcher.handle(TelegramMessage(actor_id=42, chat_id=42, text="/status"))
+
+    assert response == "admin ok"
+    admin_handler.handle.assert_awaited_once()
+    user_handler.handle.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_handle_message_user_config():
+async def test_dispatcher_routes_user():
+    admin_handler = MagicMock()
+    admin_handler.handle = AsyncMock(return_value=BotResponse(True, "admin ok"))
+    user_handler = MagicMock()
+    user_handler.handle = AsyncMock(return_value=BotResponse(True, "user ok"))
+    dispatcher = TelegramDispatcher({42}, admin_handler, user_handler)
+
+    response = await dispatcher.handle(TelegramMessage(actor_id=99, chat_id=99, text="/config"))
+
+    assert response == "user ok"
+    admin_handler.handle.assert_not_called()
+    user_handler.handle.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_user_handler_config():
     user = MagicMock(id=1, telegram_id="99", display_name="Alex")
     group = MagicMock(id=2, name="family")
     node = MagicMock(tag="node-a", protocol="vless", raw_url="vless://example")
     assignment = UserAssignment(user=user, group=group, nodes=[node])
     db = MagicMock()
+    handler = UserCommandHandler(UserHandlerDeps(session_factory=lambda: db))
 
-    with patch.object(tg, "_session", return_value=db), \
-         patch("app.services.distribution.get_user_assignment", return_value=assignment), \
-         patch("app.services.distribution.record_delivery") as record_delivery:
-        response = await tg.handle_message(
-            {"from": {"id": 99}, "chat": {"id": 99}, "text": "/config"},
-            admin_ids={42},
+    with patch("app.telegram.handlers.get_user_assignment", return_value=assignment), \
+         patch("app.telegram.handlers.record_delivery") as record_delivery:
+        response = await handler.handle(
+            TelegramMessage(actor_id=99, chat_id=99, text="/config"),
+            ParsedCommand("/config"),
         )
 
-    assert response is not None
-    assert "vless://example" in response
-    assert "node-a" in response
+    assert response.ok is True
+    assert "vless://example" in response.text
+    assert "node-a" in response.text
     assert record_delivery.called
     assert db.close.called
 
 
 @pytest.mark.asyncio
-async def test_handle_message_unregistered_user_denied():
+async def test_user_handler_unregistered_user_denied():
     assignment = UserAssignment(user=None, group=None, nodes=[], error="User is not registered.")
     db = MagicMock()
+    handler = UserCommandHandler(UserHandlerDeps(session_factory=lambda: db))
 
-    with patch.object(tg, "_session", return_value=db), \
-         patch("app.services.distribution.get_user_assignment", return_value=assignment), \
-         patch("app.services.distribution.record_delivery"), \
-         patch.object(tg, "_log_admin_action") as log_action:
-        response = await tg.handle_message(
-            {"from": {"id": 77}, "chat": {"id": 77}, "text": "/config"},
-            admin_ids={42},
+    with patch("app.telegram.handlers.get_user_assignment", return_value=assignment), \
+         patch("app.telegram.handlers.record_delivery") as record_delivery:
+        response = await handler.handle(
+            TelegramMessage(actor_id=77, chat_id=77, text="/config"),
+            ParsedCommand("/config"),
         )
 
-    assert response == "Access denied."
-    assert log_action.called
-
-
-@pytest.mark.asyncio
-async def test_handle_message_help_for_admin():
-    db = MagicMock()
-    with patch.object(tg, "_session", return_value=db):
-        response = await tg.handle_message(
-            {"from": {"id": 42}, "chat": {"id": 42}, "text": "/help"},
-            admin_ids={42},
-        )
-    assert response is not None
-    assert "/status" in response
-    assert "/activate" in response
+    assert response.ok is False
+    assert response.text == "Access denied."
+    assert record_delivery.called
     assert db.close.called
 
 
 @pytest.mark.asyncio
-async def test_handle_message_status_for_admin():
+async def test_admin_handler_help():
     db = MagicMock()
-    db.query.return_value.filter.return_value.first.return_value = None
-    with patch.object(tg, "_session", return_value=db), \
-         patch.object(tg, "_get_active_node", return_value=None), \
-         patch.object(tg, "_log_admin_action"), \
-         patch.object(tg.svc, "get_status", return_value={
-             "active_state": "active",
-             "sub_state": "running",
-             "pid": "123",
-             "since": "",
-         }), \
-         patch.object(tg, "check_external_ip", AsyncMock(return_value=("1.2.3.4", ""))):
-        response = await tg.handle_message(
-            {"from": {"id": 42}, "chat": {"id": 42}, "text": "/status"},
-            admin_ids={42},
-        )
-    assert response is not None
-    assert "active/running" in response
-    assert "1.2.3.4" in response
+    handler = AdminCommandHandler(AdminHandlerDeps(
+        session_factory=lambda: db,
+        external_ip_checker=AsyncMock(return_value=("1.2.3.4", "")),
+        health_checker=AsyncMock(),
+    ))
+
+    response = await handler.handle(
+        TelegramMessage(actor_id=42, chat_id=42, text="/help"),
+        ParsedCommand("/help"),
+    )
+
+    assert response.ok is True
+    assert "/status" in response.text
+    assert "/activate" in response.text
+    assert db.close.called
 
 
 @pytest.mark.asyncio
-async def test_send_message_splits_long_text():
-    bot = tg.TelegramAdminBot("token", {42})
-    bot._post = AsyncMock(return_value={"ok": True})  # type: ignore[assignment]
+async def test_admin_handler_status():
+    db = MagicMock()
+    node = MagicMock(tag="node-a")
+    db.query.return_value.filter.return_value.first.return_value = node
+    handler = AdminCommandHandler(AdminHandlerDeps(
+        session_factory=lambda: db,
+        status_provider=lambda: {
+            "active_state": "active",
+            "sub_state": "running",
+            "pid": "123",
+            "since": "",
+        },
+        external_ip_checker=AsyncMock(return_value=("1.2.3.4", "")),
+        health_checker=AsyncMock(),
+    ))
 
-    await bot.send_message(42, "x" * 8000)
+    response = await handler.handle(
+        TelegramMessage(actor_id=42, chat_id=42, text="/status"),
+        ParsedCommand("/status"),
+    )
 
-    assert bot._post.await_count == 3
-    first_payload = bot._post.await_args_list[0].args[1]
+    assert response.ok is True
+    assert "active/running" in response.text
+    assert "1.2.3.4" in response.text
+
+
+@pytest.mark.asyncio
+async def test_telegram_client_send_message_splits_long_text():
+    client = TelegramApiClient("token")
+    client._post = AsyncMock(return_value={"ok": True})  # type: ignore[assignment]
+
+    await client.send_message(42, "x" * 8000)
+
+    assert client._post.await_count == 3
+    first_payload = client._post.await_args_list[0].args[1]
     assert first_payload["chat_id"] == 42
     assert len(first_payload["text"]) == 3900

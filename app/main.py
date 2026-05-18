@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -14,6 +13,7 @@ from alembic.config import Config as AlembicConfig
 
 from app import notify
 from app.auth import AuthMiddleware, emit_startup_warnings
+from app.config import settings as app_settings
 from app.db import SessionLocal
 from app.health import run_health_checks
 from app.logging_config import get_logger, setup_logging
@@ -25,7 +25,7 @@ from app.web import BASE_DIR
 
 _log = get_logger(__name__)
 
-_HEALTH_CHECK_INTERVAL = int(os.environ.get("HEALTH_CHECK_INTERVAL", "300"))
+_HEALTH_CHECK_INTERVAL = app_settings.health_check_interval
 _HEALTH_RETAIN_DAYS = 7
 _last_health_state: str = "unknown"
 

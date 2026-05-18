@@ -115,8 +115,8 @@ async def check_tcp(host: str = "1.1.1.1", port: int = 80) -> CheckResult:
         writer.close()
         try:
             await writer.wait_closed()
-        except Exception:
-            pass
+        except (OSError, RuntimeError) as exc:
+            _log.debug("TCP writer close failed for %s:%s: %s", host, port, exc)
         return CheckResult(f"TCP {host}:{port}", ok=True, latency_ms=ms,
                            detail=f"Connected in {ms:.0f}ms")
     except asyncio.TimeoutError:
@@ -159,7 +159,8 @@ async def check_external_ip() -> tuple[Optional[str], str]:
                     ip = r.text.strip()
                     if ip:
                         return ip, ""
-            except Exception:
+            except (httpx.HTTPError, OSError) as exc:
+                _log.debug("External IP provider failed (%s): %s", url, exc)
                 continue
     return None, "all IP providers unreachable"
 

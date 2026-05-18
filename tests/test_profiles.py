@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import uuid
 from contextlib import ExitStack
 from unittest.mock import patch
 
@@ -236,7 +237,7 @@ def test_activate_profile_missing_node_shows_error(client):
     db = SessionLocal()
     try:
         ghost = Profile(
-            name="ghost-profile", node_tag="nonexistent-node",
+            name=f"ghost-profile-{uuid.uuid4().hex[:8]}", node_tag="nonexistent-node",
             dns_preset="quad9_tls", route_preset="full_tunnel", active=False,
         )
         db.add(ghost)

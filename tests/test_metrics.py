@@ -60,6 +60,19 @@ def client():
         yield c
 
 
+@pytest.fixture(autouse=True)
+def clean_health_logs():
+    db = SessionLocal()
+    try:
+        db.query(HealthCheckLog).delete()
+        db.commit()
+        yield
+        db.query(HealthCheckLog).delete()
+        db.commit()
+    finally:
+        db.close()
+
+
 def _seed(check_name: str, category: str = "connectivity",
           n: int = 5, ok: bool = True, latency: float = 42.0):
     db = SessionLocal()

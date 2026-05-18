@@ -4,20 +4,23 @@ import hashlib
 import json
 import os
 import re
-import subprocess
 import uuid as _uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Optional
 
+from app.config import settings
 from app.logging_config import get_logger
 from app.notify import fire as _notify
 from app.singbox import service as svc
 from app.singbox.validator import validate_config
+from app.system_clients import SubprocessCommandRunner, SystemServiceClient
 
 _log = get_logger(__name__)
 
-HELPER_BIN = os.environ.get("HELPER_BIN", "/usr/local/bin/singbox-manager-helper")
+HELPER_BIN = settings.system_paths.helper_bin
+_runner = SubprocessCommandRunner()
+_system = SystemServiceClient(_runner, HELPER_BIN)
 
 # Module-level lock: only one deploy pipeline runs at a time.
 _deploy_lock = asyncio.Lock()
@@ -52,19 +55,12 @@ class DeployResult:
 
 
 def _run_helper(*args: str, timeout: int = 30) -> tuple[bool, str]:
-    try:
-        result = subprocess.run(
-            ["sudo", HELPER_BIN, *args],
-            capture_output=True, text=True, timeout=timeout,
-        )
-        out = (result.stdout + result.stderr).strip()
-        return result.returncode == 0, out
-    except subprocess.TimeoutExpired:
-        return False, f"Helper timed out after {timeout}s"
-    except FileNotFoundError:
+    if not args:
+        return False, "Helper action is required"
+    result = _system.helper(args[0], *args[1:], timeout=timeout)
+    if not result.ok and result.output.startswith("Command not found"):
         return False, f"Helper not found at {HELPER_BIN}. See README install steps."
-    except Exception as e:
-        return False, str(e)
+    return result.ok, result.output
 
 
 def _extract_backup_name(output: str) -> Optional[str]:
@@ -73,14 +69,7 @@ def _extract_backup_name(output: str) -> Optional[str]:
 
 
 def _service_is_active() -> bool:
-    try:
-        r = subprocess.run(
-            ["systemctl", "is-active", "sing-box.service"],
-            capture_output=True, text=True, timeout=5,
-        )
-        return r.stdout.strip() == "active"
-    except Exception:
-        return False
+    return _system.is_active()
 
 
 async def _wait_service_active(attempts: int = 6, delay: float = 1.0) -> bool:
@@ -200,7 +189,7 @@ def list_backups() -> list[str]:
         return []
     try:
         return json.loads(out)
-    except Exception:
+    except (TypeError, ValueError, json.JSONDecodeError):
         return []
 
 
@@ -213,5 +202,6 @@ def get_current_config() -> Optional[dict]:
     try:
         with open("/etc/sing-box/config.json") as f:
             return json.load(f)
-    except Exception:
+    except (FileNotFoundError, PermissionError, json.JSONDecodeError, OSError) as exc:
+        _log.debug("Could not read deployed config: %s", exc)
         return None

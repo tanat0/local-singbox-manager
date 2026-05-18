@@ -10,10 +10,9 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import Node, Profile
 from app.routes.common import redirect
-from app.services.deploy import activate_node as activate_node_service
-from app.services.settings import presets, set_setting
+from app.services import profiles as profile_service
+from app.services.settings import presets
 from app.singbox.dns import DNS_PRESETS
 from app.singbox.routes import ROUTE_PRESETS
 from app.web import templates
@@ -23,16 +22,15 @@ router = APIRouter()
 
 @router.get("/profiles", response_class=HTMLResponse)
 async def profiles_page(request: Request, db: Session = Depends(get_db)):
-    profiles = db.query(Profile).order_by(Profile.created_at).all()
-    nodes = db.query(Node).order_by(Node.tag).all()
     dns_p, route_p = presets(db)
+    page = profile_service.profiles_page_data(db, dns_p, route_p)
     return templates.TemplateResponse(request, "profiles.html", {
-        "profiles": profiles,
-        "nodes": nodes,
+        "profiles": page.profiles,
+        "nodes": page.nodes,
         "dns_presets": DNS_PRESETS,
         "route_presets": ROUTE_PRESETS,
-        "dns_preset": dns_p,
-        "route_preset": route_p,
+        "dns_preset": page.dns_preset,
+        "route_preset": page.route_preset,
         "msg": request.query_params.get("msg", ""),
         "msg_type": request.query_params.get("msg_type", "info"),
     })
@@ -47,63 +45,25 @@ async def create_profile(
     route_preset: Annotated[str, Form()] = "full_tunnel",
     db: Session = Depends(get_db),
 ):
-    name = name.strip()
-    if not name:
-        return redirect("/profiles", msg="Profile name is required", msg_type="error")
-    if dns_preset not in DNS_PRESETS:
-        return redirect("/profiles", msg=f"Invalid DNS preset: {dns_preset!r}", msg_type="error")
-    if route_preset not in ROUTE_PRESETS:
-        return redirect("/profiles", msg=f"Invalid route preset: {route_preset!r}", msg_type="error")
-    existing = db.query(Profile).filter(Profile.name == name).first()
-    if existing:
-        return redirect("/profiles", msg=f"Profile '{name}' already exists", msg_type="error")
-    db.add(Profile(
+    data = profile_service.ProfileInput(
         name=name,
-        description=description.strip() or None,
-        node_tag=node_tag.strip() or None,
+        description=description,
+        node_tag=node_tag,
         dns_preset=dns_preset,
         route_preset=route_preset,
-        active=False,
-    ))
-    db.commit()
-    return redirect("/profiles", msg=f"Created profile '{name}'", msg_type="success")
+    )
+    return _profile_redirect(profile_service.create_profile(db, data))
 
 
 @router.post("/profiles/{profile_id}/activate")
 async def activate_profile(profile_id: int, db: Session = Depends(get_db)):
-    profile = db.query(Profile).filter(Profile.id == profile_id).first()
-    if not profile:
-        return redirect("/profiles", msg="Profile not found", msg_type="error")
-    if not profile.node_tag:
-        return redirect(
-            "/profiles",
-            msg=f"Profile '{profile.name}' has no node — edit or delete it",
-            msg_type="error",
-        )
-
-    node = db.query(Node).filter(Node.tag == profile.node_tag).first()
-    if not node:
-        return redirect(
-            "/profiles",
-            msg=f"Node '{profile.node_tag}' no longer exists — update the profile",
-            msg_type="error",
-        )
-
-    result = await activate_node_service(db, node, profile=profile)
-    if not result.ok:
-        return redirect("/profiles", msg=result.message, msg_type="error")
-    set_setting(db, "dns_preset", profile.dns_preset)
-    set_setting(db, "route_preset", profile.route_preset)
-    db.commit()
-    return redirect("/", msg=f"✓ Profile '{profile.name}' activated", msg_type="success")
+    return _profile_redirect(await profile_service.activate_profile(db, profile_id))
 
 
 @router.post("/profiles/{profile_id}/delete")
 async def delete_profile(profile_id: int, db: Session = Depends(get_db)):
-    profile = db.query(Profile).filter(Profile.id == profile_id).first()
-    if not profile:
-        return redirect("/profiles", msg="Profile not found", msg_type="error")
-    name = profile.name
-    db.delete(profile)
-    db.commit()
-    return redirect("/profiles", msg=f"Deleted profile '{name}'", msg_type="success")
+    return _profile_redirect(profile_service.delete_profile(db, profile_id))
+
+
+def _profile_redirect(result: profile_service.ProfileMutationResult):
+    return redirect(result.redirect_to, msg=result.message, msg_type="success" if result.ok else "error")

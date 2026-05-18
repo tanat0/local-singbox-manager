@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-
 try:
     from typing import Annotated
 except ImportError:
@@ -12,11 +10,11 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import Node
-from app.parsers import parse_url
+from app.repositories import NodeRepository
 from app.routes.common import redirect
+from app.services import nodes as node_service
 from app.services.deploy import activate_node as activate_node_service
-from app.services.nodes import latest_deploy_logs, refresh_node_geo as refresh_geo
+from app.services.nodes import NodeMetadataInput
 from app.web import templates
 
 router = APIRouter()
@@ -24,10 +22,9 @@ router = APIRouter()
 
 @router.get("/nodes", response_class=HTMLResponse)
 async def nodes_page(request: Request, db: Session = Depends(get_db)):
-    nodes = db.query(Node).order_by(Node.active.desc(), Node.created_at.desc()).all()
     return templates.TemplateResponse(request, "nodes.html", {
-        "nodes": nodes,
-        "latest_logs": latest_deploy_logs(db),
+        "nodes": node_service.list_nodes_for_dashboard(db),
+        "latest_logs": node_service.latest_deploy_logs(db),
         "msg": request.query_params.get("msg", ""),
         "msg_type": request.query_params.get("msg_type", "info"),
     })
@@ -35,47 +32,12 @@ async def nodes_page(request: Request, db: Session = Depends(get_db)):
 
 @router.post("/nodes")
 async def add_node(url: Annotated[str, Form()], db: Session = Depends(get_db)):
-    try:
-        parsed = parse_url(url)
-    except Exception as e:
-        return redirect("/nodes", msg=f"Parse error: {e}", msg_type="error")
-
-    existing = db.query(Node).filter(Node.tag == parsed.tag).first()
-    if existing:
-        existing.raw_url = parsed.raw_url
-        existing.protocol = parsed.protocol
-        existing.parsed_json = json.dumps(parsed.to_dict())
-        existing.schema_version = parsed.schema_version
-        await refresh_geo(existing)
-        db.commit()
-        return redirect("/nodes", msg=f"Updated '{parsed.tag}'", msg_type="success")
-
-    node = Node(
-        tag=parsed.tag,
-        protocol=parsed.protocol,
-        raw_url=parsed.raw_url,
-        parsed_json=json.dumps(parsed.to_dict()),
-        schema_version=parsed.schema_version,
-        active=False,
-    )
-    await refresh_geo(node)
-    db.add(node)
-    db.commit()
-    return redirect("/nodes", msg=f"Added '{parsed.tag}'", msg_type="success")
+    return _nodes_redirect(await node_service.add_or_update_node(db, url))
 
 
 @router.post("/nodes/{node_id}/delete")
 async def delete_node(node_id: int, db: Session = Depends(get_db)):
-    node = db.query(Node).filter(Node.id == node_id).first()
-    if not node:
-        return redirect("/nodes", msg="Node not found", msg_type="error")
-    was_active, tag = node.active, node.tag
-    db.delete(node)
-    db.commit()
-    msg = f"Deleted '{tag}'"
-    if was_active:
-        msg += " (was active — sing-box still runs previous config)"
-    return redirect("/nodes", msg=msg, msg_type="success")
+    return _nodes_redirect(node_service.delete_node(db, node_id))
 
 
 @router.post("/nodes/{node_id}/metadata")
@@ -87,30 +49,23 @@ async def update_node_metadata(
     notes: Annotated[str, Form()] = "",
     db: Session = Depends(get_db),
 ):
-    node = db.query(Node).filter(Node.id == node_id).first()
-    if not node:
-        return redirect("/nodes", msg="Node not found", msg_type="error")
-    node.country_code = country_code.strip().upper()[:8] or None
-    node.country_name = country_name.strip() or None
-    node.provider_name = provider_name.strip() or None
-    node.notes = notes.strip() or None
-    db.commit()
-    return redirect("/nodes", msg=f"Updated metadata for '{node.tag}'", msg_type="success")
+    data = NodeMetadataInput(
+        country_code=country_code,
+        country_name=country_name,
+        provider_name=provider_name,
+        notes=notes,
+    )
+    return _nodes_redirect(node_service.update_node_metadata(db, node_id, data))
 
 
 @router.post("/nodes/{node_id}/refresh-geo")
 async def refresh_node_geo(node_id: int, db: Session = Depends(get_db)):
-    node = db.query(Node).filter(Node.id == node_id).first()
-    if not node:
-        return redirect("/nodes", msg="Node not found", msg_type="error")
-    await refresh_geo(node)
-    db.commit()
-    return redirect("/nodes", msg=f"Refreshed geo for '{node.tag}'", msg_type="success")
+    return _nodes_redirect(await node_service.refresh_geo_by_id(db, node_id))
 
 
 @router.post("/nodes/{node_id}/activate")
 async def activate_node(node_id: int, db: Session = Depends(get_db)):
-    node = db.query(Node).filter(Node.id == node_id).first()
+    node = NodeRepository(db).get_by_id(node_id)
     if not node:
         return redirect("/nodes", msg="Node not found", msg_type="error")
     result = await activate_node_service(db, node)
@@ -119,20 +74,7 @@ async def activate_node(node_id: int, db: Session = Depends(get_db)):
 
 @router.get("/api/nodes/export")
 async def export_nodes(db: Session = Depends(get_db)):
-    nodes = db.query(Node).all()
-    data = [{
-        "tag": n.tag,
-        "protocol": n.protocol,
-        "raw_url": n.raw_url,
-        "parsed": json.loads(n.parsed_json),
-        "schema_version": n.schema_version,
-        "country_code": n.country_code,
-        "country_name": n.country_name,
-        "provider_name": n.provider_name,
-        "provider_suggestion": n.provider_suggestion,
-        "notes": n.notes,
-    } for n in nodes]
-    content = json.dumps(data, indent=2, ensure_ascii=False)
+    content = node_service.export_nodes_payload(db)
     return StreamingResponse(
         iter([content]),
         media_type="application/json",
@@ -142,53 +84,8 @@ async def export_nodes(db: Session = Depends(get_db)):
 
 @router.post("/api/nodes/import")
 async def import_nodes(nodes_json: Annotated[str, Form()], db: Session = Depends(get_db)):
-    try:
-        data = json.loads(nodes_json)
-        if not isinstance(data, list):
-            raise ValueError("Expected a JSON array")
-    except Exception as e:
-        return redirect("/nodes", msg=f"Import error: {e}", msg_type="error")
+    return _nodes_redirect(await node_service.import_nodes_payload(db, nodes_json))
 
-    imported, errors = 0, []
-    for item in data:
-        raw_url = item.get("raw_url", "")
-        if not raw_url:
-            continue
-        try:
-            parsed = parse_url(raw_url)
-            existing = db.query(Node).filter(Node.tag == parsed.tag).first()
-            if existing:
-                existing.raw_url = parsed.raw_url
-                existing.protocol = parsed.protocol
-                existing.parsed_json = json.dumps(parsed.to_dict())
-                existing.schema_version = parsed.schema_version
-                existing.country_code = item.get("country_code") or existing.country_code
-                existing.country_name = item.get("country_name") or existing.country_name
-                existing.provider_name = item.get("provider_name") or existing.provider_name
-                existing.provider_suggestion = item.get("provider_suggestion") or existing.provider_suggestion
-                existing.notes = item.get("notes") or existing.notes
-            else:
-                node = Node(
-                    tag=parsed.tag,
-                    protocol=parsed.protocol,
-                    raw_url=parsed.raw_url,
-                    parsed_json=json.dumps(parsed.to_dict()),
-                    schema_version=parsed.schema_version,
-                    active=False,
-                    country_code=item.get("country_code") or None,
-                    country_name=item.get("country_name") or None,
-                    provider_name=item.get("provider_name") or None,
-                    provider_suggestion=item.get("provider_suggestion") or None,
-                    notes=item.get("notes") or None,
-                )
-                if not node.country_code and not node.country_name:
-                    await refresh_geo(node)
-                db.add(node)
-            imported += 1
-        except Exception as e:
-            errors.append(f"{raw_url[:40]}: {e}")
-    db.commit()
-    msg = f"Imported {imported} nodes"
-    if errors:
-        msg += f". Skipped: {'; '.join(errors[:3])}"
-    return redirect("/nodes", msg=msg, msg_type="success" if imported else "error")
+
+def _nodes_redirect(result: node_service.NodeMutationResult):
+    return redirect("/nodes", msg=result.message, msg_type="success" if result.ok else "error")

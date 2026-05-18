@@ -24,17 +24,18 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse, Response
 
 from app.logging_config import get_logger
+from app.config import settings
 
 _log = get_logger(__name__)
 
 # ── Config from environment ───────────────────────────────────────────────────
 
-ADMIN_PASSWORD: str = os.environ.get("SINGLE_ADMIN_PASSWORD", "")
+ADMIN_PASSWORD: str = settings.security.admin_password
 SESSION_COOKIE = "sb_session"
 SESSION_MAX_AGE = 30 * 24 * 3600  # 30 days
 
 # If SESSION_SECRET is not set, generate an ephemeral one (sessions reset on restart).
-_raw_secret = os.environ.get("SESSION_SECRET", "")
+_raw_secret = settings.security.session_secret
 SESSION_SECRET: str = _raw_secret or secrets.token_hex(32)
 
 AUTH_ENABLED: bool = bool(ADMIN_PASSWORD)
@@ -76,7 +77,7 @@ def verify_session_token(token: str) -> bool:
             return False
         expected = _sign_session(ts)
         return hmac.compare_digest(expected, sig)
-    except Exception:
+    except (TypeError, ValueError):
         return False
 
 

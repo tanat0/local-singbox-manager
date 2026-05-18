@@ -1,19 +1,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, List, Optional, TYPE_CHECKING
+from typing import List, Optional, TYPE_CHECKING
 
 from app.services.users import decode_node_tags
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
+    from app.models import ConfigGroup, ManagedUser, Node
 
 
 @dataclass
 class UserAssignment:
-    user: Optional[Any]
-    group: Optional[Any]
-    nodes: List[Any]
+    user: Optional["ManagedUser"]
+    group: Optional["ConfigGroup"]
+    nodes: List["Node"]
     error: str = ""
 
 

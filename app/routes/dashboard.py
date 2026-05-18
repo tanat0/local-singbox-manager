@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import difflib
 import json
-import statistics
-from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -12,8 +10,9 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.health import check_external_ip, run_health_checks
-from app.models import HealthCheckLog, Node, Profile
+from app.repositories import NodeRepository, ProfileRepository
 from app.routes.common import redirect
+from app.services.metrics import latency_series
 from app.services.nodes import deserialize_node, latest_deploy_logs
 from app.services.settings import presets, singbox_log_level
 from app.singbox import service as svc
@@ -28,14 +27,13 @@ router = APIRouter()
 @router.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request, db: Session = Depends(get_db)):
     status = svc.get_status()
-    active_node = db.query(Node).filter(Node.active.is_(True)).first()
-    active_profile = db.query(Profile).filter(Profile.active.is_(True)).first()
-    nodes = db.query(Node).order_by(Node.active.desc(), Node.created_at.desc()).all()
+    node_repo = NodeRepository(db)
+    profile_repo = ProfileRepository(db)
     return templates.TemplateResponse(request, "dashboard.html", {
         "status": status,
-        "active_node": active_node,
-        "active_profile": active_profile,
-        "nodes": nodes,
+        "active_node": node_repo.get_active(),
+        "active_profile": profile_repo.get_active(),
+        "nodes": node_repo.list_for_dashboard(),
         "latest_logs": latest_deploy_logs(db),
         "msg": request.query_params.get("msg", ""),
         "msg_type": request.query_params.get("msg_type", "info"),
@@ -59,7 +57,7 @@ async def service_action(action: str):
 
 @router.post("/validate")
 async def validate_active(db: Session = Depends(get_db)):
-    node = db.query(Node).filter(Node.active.is_(True)).first()
+    node = NodeRepository(db).get_active()
     if not node:
         return redirect("/", msg="No active node", msg_type="error")
     try:
@@ -140,53 +138,12 @@ async def api_sysinfo():
 
 @router.get("/api/metrics/latency")
 async def api_metrics_latency(hours: int = 24, db: Session = Depends(get_db)):
-    hours = min(max(hours, 1), 168)
-    cutoff = datetime.utcnow() - timedelta(hours=hours)
-
-    rows = (
-        db.query(HealthCheckLog)
-        .filter(
-            HealthCheckLog.checked_at >= cutoff,
-            HealthCheckLog.category == "connectivity",
-        )
-        .order_by(HealthCheckLog.checked_at)
-        .all()
-    )
-
-    by_name: dict = {}
-    for row in rows:
-        by_name.setdefault(row.check_name, []).append(row)
-
-    series = []
-    for name, checks in by_name.items():
-        total = len(checks)
-        ok_count = sum(1 for c in checks if c.ok)
-        latencies = [c.latency_ms for c in checks if c.ok and c.latency_ms is not None]
-
-        points = []
-        for c in checks:
-            ts = c.checked_at.strftime("%H:%M") if c.checked_at else "?"
-            points.append({
-                "t": ts,
-                "ms": round(c.latency_ms, 1) if c.latency_ms is not None else None,
-                "ok": c.ok,
-            })
-
-        series.append({
-            "name": name,
-            "points": points,
-            "uptime_pct": round(ok_count / total * 100, 1) if total else None,
-            "avg_ms": round(statistics.mean(latencies), 1) if latencies else None,
-            "p95_ms": round(sorted(latencies)[int(len(latencies) * 0.95)], 1) if len(latencies) >= 2 else None,
-            "sample_count": total,
-        })
-
-    return JSONResponse({"hours": hours, "series": series})
+    return JSONResponse(latency_series(db, hours))
 
 
 @router.get("/api/diff", response_class=HTMLResponse)
 async def api_diff(db: Session = Depends(get_db)):
-    node = db.query(Node).filter(Node.active.is_(True)).first()
+    node = NodeRepository(db).get_active()
     if not node:
         return HTMLResponse('<p class="text-dim">No active node selected.</p>')
 

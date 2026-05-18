@@ -12,23 +12,23 @@ Levels: "info" | "warning" | "critical"
 from __future__ import annotations
 
 import asyncio
-import os
 import shutil
 import subprocess
 from typing import Dict
 
 import httpx
 
+from app.config import settings
 from app.logging_config import get_logger
 
 _log = get_logger(__name__)
 
 # ── Runtime config (patched in tests via patch.object) ───────────────────────
 
-TELEGRAM_BOT_TOKEN: str = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID: str   = os.environ.get("TELEGRAM_CHAT_ID", "")
-NTFY_TOPIC: str          = os.environ.get("NTFY_TOPIC", "")
-NTFY_SERVER: str         = os.environ.get("NTFY_SERVER", "https://ntfy.sh")
+TELEGRAM_BOT_TOKEN: str = settings.telegram.bot_token
+TELEGRAM_CHAT_ID: str = settings.telegram.chat_id
+NTFY_TOPIC: str = settings.notifications.ntfy_topic
+NTFY_SERVER: str = settings.notifications.ntfy_server
 
 # ── Per-level mappings ────────────────────────────────────────────────────────
 
@@ -63,8 +63,8 @@ async def _notify_send(title: str, body: str, level: str) -> None:
     try:
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, _notify_send_sync, title, body, urgency)
-    except Exception:
-        pass  # binary missing or no DBUS session — silently skip
+    except (FileNotFoundError, subprocess.SubprocessError, OSError, RuntimeError) as exc:
+        _log.debug("notify-send notification skipped: %s", exc)
 
 
 async def _telegram(title: str, body: str) -> None:
@@ -114,17 +114,26 @@ async def _dispatch(title: str, body: str, level: str) -> None:
 
 
 def fire(title: str, body: str, level: str = "info") -> None:
-    """Schedule a notification as a fire-and-forget asyncio task.
+    NotificationService().fire(title, body, level)
 
-    Safe to call from any async context (request handler, background task).
-    No-op if the event loop is not running (e.g. during unit tests).
-    """
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            loop.create_task(_dispatch(title, body, level))
-    except Exception:
-        pass
+
+class NotificationService:
+    """Fire-and-forget notification boundary used by web routes and bot handlers."""
+
+    def fire(self, title: str, body: str, level: str = "info") -> None:
+        """No-op without a running event loop, which keeps sync tests deterministic."""
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(_dispatch(title, body, level))
+        except RuntimeError as exc:
+            _log.debug("notification skipped because no event loop is running: %s", exc)
+        except Exception as exc:
+            _log.warning("notification scheduling failed: %s", exc)
+
+
+def create_notification_service() -> NotificationService:
+    return NotificationService()
 
 
 # ── Status introspection (for Settings UI) ───────────────────────────────────
