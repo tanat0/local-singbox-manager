@@ -5,7 +5,7 @@ from urllib.parse import urlparse, parse_qs, unquote
 from app.parsers.base import ParsedNode
 from app.parsers.registry import register
 
-_KNOWN = {"sni", "insecure", "obfs", "obfs-password", "obfsParam",
+_KNOWN = {"sni", "insecure", "security", "obfs", "obfs-password", "obfsParam",
           "up", "upmbps", "up_mbps", "down", "downmbps", "down_mbps"}
 
 
@@ -36,7 +36,7 @@ def parse_hysteria2(url: str) -> Hysteria2Node:
         raise ValueError(f"Expected hysteria2:// or hy2://, got {parsed.scheme}://")
 
     # auth may be in username or password field depending on client
-    auth = parsed.username or parsed.password or ""
+    auth = unquote(parsed.username or parsed.password or "")
     if not auth:
         raise ValueError("Missing auth/password in Hysteria2 URL")
     server = parsed.hostname

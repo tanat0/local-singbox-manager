@@ -33,6 +33,15 @@
       </select>
     </div>
 
+    <div class="form-group">
+      <label>sing-box Log Level</label>
+      <select name="singbox_log_level">
+        {% for level in log_levels %}
+        <option value="{{ level }}" {% if level == singbox_log_level %}selected{% endif %}>{{ level }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
     <button type="submit" class="btn btn-primary">Save Settings</button>
   </form>
   <p class="text-dim" style="margin-top:14px">

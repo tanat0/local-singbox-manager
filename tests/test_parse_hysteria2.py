@@ -13,6 +13,11 @@ def test_parse_auth():
     assert parse_hysteria2(BASE_URL).auth == "mypassword"
 
 
+def test_parse_percent_encoded_auth():
+    url = "hysteria2://pa%24%40%5E%25ss@1.2.3.4:443#t"
+    assert parse_hysteria2(url).auth == "pa$@^%ss"
+
+
 def test_parse_server_port():
     n = parse_hysteria2(BASE_URL)
     assert n.server == "1.2.3.4"
@@ -95,6 +100,12 @@ def test_outbound_structure():
     assert out["password"] == "mypassword"
     assert out["tls"]["enabled"] is True
     assert out["tls"]["server_name"] == "example.com"
+
+
+def test_outbound_percent_encoded_auth_decoded():
+    url = "hysteria2://pa%24%40%5E%25ss@1.2.3.4:443#t"
+    out = build_outbound(parse_hysteria2(url))
+    assert out["password"] == "pa$@^%ss"
 
 
 def test_outbound_uses_quic_not_tcp():

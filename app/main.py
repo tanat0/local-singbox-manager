@@ -33,6 +33,7 @@ from app.db import SessionLocal, get_db
 from app.health import run_health_checks, check_external_ip
 from app.logging_config import setup_logging, get_logger
 from app import notify
+from app.geo import lookup_node_geo
 from app.version import VERSION
 
 _log = get_logger(__name__)
@@ -50,6 +51,7 @@ from app.singbox.validator import validate_config
 _HEALTH_CHECK_INTERVAL = int(os.environ.get("HEALTH_CHECK_INTERVAL", "300"))
 _HEALTH_RETAIN_DAYS = 7
 _last_health_state: str = "unknown"   # tracks previous overall to detect transitions
+LOG_LEVELS = ("error", "warn", "info", "debug")
 
 
 def _run_migrations() -> None:
@@ -240,6 +242,31 @@ def _presets(db: Session) -> tuple[str, str]:
     )
 
 
+def _singbox_log_level(db: Session) -> str:
+    level = _get_setting(db, "singbox_log_level", "warn")
+    return level if level in LOG_LEVELS else "warn"
+
+
+async def _refresh_node_geo(node: Node) -> None:
+    parsed = json.loads(node.parsed_json)
+    info = await lookup_node_geo(parsed.get("server", ""))
+    if info.country_code:
+        node.country_code = info.country_code
+    if info.country_name:
+        node.country_name = info.country_name
+    if info.provider_suggestion:
+        node.provider_suggestion = info.provider_suggestion
+
+
+def _latest_deploy_logs(db: Session) -> dict[str, DeployLog]:
+    latest: dict[str, DeployLog] = {}
+    rows = db.query(DeployLog).order_by(DeployLog.started_at.desc(), DeployLog.id.desc()).all()
+    for row in rows:
+        if row.node_tag and row.node_tag not in latest:
+            latest[row.node_tag] = row
+    return latest
+
+
 # ---------------------------------------------------------------------------
 # Dashboard
 # ---------------------------------------------------------------------------
@@ -249,10 +276,13 @@ async def dashboard(request: Request, db: Session = Depends(get_db)):
     status = svc.get_status()
     active_node = db.query(Node).filter(Node.active.is_(True)).first()
     active_profile = db.query(Profile).filter(Profile.active.is_(True)).first()
+    nodes = db.query(Node).order_by(Node.active.desc(), Node.created_at.desc()).all()
     return templates.TemplateResponse(request, "dashboard.html", {
         "status": status,
         "active_node": active_node,
         "active_profile": active_profile,
+        "nodes": nodes,
+        "latest_logs": _latest_deploy_logs(db),
         "msg": request.query_params.get("msg", ""),
         "msg_type": request.query_params.get("msg_type", "info"),
     })
@@ -281,7 +311,8 @@ async def validate_active(db: Session = Depends(get_db)):
     try:
         parsed = _deserialize_node(node)
         dns_p, route_p = _presets(db)
-        config = generate_config(parsed, dns_preset=dns_p, route_preset=route_p)
+        config = generate_config(parsed, dns_preset=dns_p, route_preset=route_p,
+                                 log_level=_singbox_log_level(db))
     except Exception as e:
         return _redirect("/", msg=f"Config generation error: {e}", msg_type="error")
     ok, msg = validate_config(config)
@@ -301,9 +332,10 @@ async def api_ip():
 
 
 @app.get("/api/logs", response_class=HTMLResponse)
-async def api_logs(lines: int = 100):
+async def api_logs(lines: int = 100, mode: str = "all", grep: str = ""):
     lines = min(lines, 500)
-    return HTMLResponse(f'<pre class="log-output">{escape(svc.get_logs(lines))}</pre>')
+    mode = mode if mode in {"all", "problems", "fatal"} else "all"
+    return HTMLResponse(f'<pre class="log-output">{escape(svc.get_logs(lines, mode=mode, grep=grep))}</pre>')
 
 
 @app.get("/api/health", response_class=HTMLResponse)
@@ -411,7 +443,8 @@ async def api_diff(db: Session = Depends(get_db)):
     try:
         parsed = _deserialize_node(node)
         dns_p, route_p = _presets(db)
-        new_config = generate_config(parsed, dns_preset=dns_p, route_preset=route_p)
+        new_config = generate_config(parsed, dns_preset=dns_p, route_preset=route_p,
+                                     log_level=_singbox_log_level(db))
         new_text = json.dumps(new_config, indent=2)
     except Exception as e:
         return HTMLResponse(f'<p class="text-dim">Generation error: {e}</p>')
@@ -444,9 +477,10 @@ async def api_diff(db: Session = Depends(get_db)):
 
 @app.get("/nodes", response_class=HTMLResponse)
 async def nodes_page(request: Request, db: Session = Depends(get_db)):
-    nodes = db.query(Node).order_by(Node.created_at.desc()).all()
+    nodes = db.query(Node).order_by(Node.active.desc(), Node.created_at.desc()).all()
     return templates.TemplateResponse(request, "nodes.html", {
         "nodes": nodes,
+        "latest_logs": _latest_deploy_logs(db),
         "msg": request.query_params.get("msg", ""),
         "msg_type": request.query_params.get("msg_type", "info"),
     })
@@ -465,14 +499,17 @@ async def add_node(url: Annotated[str, Form()], db: Session = Depends(get_db)):
         existing.protocol = parsed.protocol
         existing.parsed_json = json.dumps(parsed.to_dict())
         existing.schema_version = parsed.schema_version
+        await _refresh_node_geo(existing)
         db.commit()
         return _redirect("/nodes", msg=f"Updated '{parsed.tag}'", msg_type="success")
 
-    db.add(Node(
+    node = Node(
         tag=parsed.tag, protocol=parsed.protocol, raw_url=parsed.raw_url,
         parsed_json=json.dumps(parsed.to_dict()),
         schema_version=parsed.schema_version, active=False,
-    ))
+    )
+    await _refresh_node_geo(node)
+    db.add(node)
     db.commit()
     return _redirect("/nodes", msg=f"Added '{parsed.tag}'", msg_type="success")
 
@@ -491,6 +528,36 @@ async def delete_node(node_id: int, db: Session = Depends(get_db)):
     return _redirect("/nodes", msg=msg, msg_type="success")
 
 
+@app.post("/nodes/{node_id}/metadata")
+async def update_node_metadata(
+    node_id: int,
+    country_code: Annotated[str, Form()] = "",
+    country_name: Annotated[str, Form()] = "",
+    provider_name: Annotated[str, Form()] = "",
+    notes: Annotated[str, Form()] = "",
+    db: Session = Depends(get_db),
+):
+    node = db.query(Node).filter(Node.id == node_id).first()
+    if not node:
+        return _redirect("/nodes", msg="Node not found", msg_type="error")
+    node.country_code = country_code.strip().upper()[:8] or None
+    node.country_name = country_name.strip() or None
+    node.provider_name = provider_name.strip() or None
+    node.notes = notes.strip() or None
+    db.commit()
+    return _redirect("/nodes", msg=f"Updated metadata for '{node.tag}'", msg_type="success")
+
+
+@app.post("/nodes/{node_id}/refresh-geo")
+async def refresh_node_geo(node_id: int, db: Session = Depends(get_db)):
+    node = db.query(Node).filter(Node.id == node_id).first()
+    if not node:
+        return _redirect("/nodes", msg="Node not found", msg_type="error")
+    await _refresh_node_geo(node)
+    db.commit()
+    return _redirect("/nodes", msg=f"Refreshed geo for '{node.tag}'", msg_type="success")
+
+
 @app.post("/nodes/{node_id}/activate")
 async def activate_node(node_id: int, db: Session = Depends(get_db)):
     node = db.query(Node).filter(Node.id == node_id).first()
@@ -502,7 +569,8 @@ async def activate_node(node_id: int, db: Session = Depends(get_db)):
         return _redirect("/nodes", msg=f"Failed to load node: {e}", msg_type="error")
     try:
         dns_p, route_p = _presets(db)
-        config = generate_config(parsed, dns_preset=dns_p, route_preset=route_p)
+        config = generate_config(parsed, dns_preset=dns_p, route_preset=route_p,
+                                 log_level=_singbox_log_level(db))
     except Exception as e:
         return _redirect("/nodes", msg=f"Config generation failed: {e}", msg_type="error")
 
@@ -537,7 +605,10 @@ async def activate_node(node_id: int, db: Session = Depends(get_db)):
 async def export_nodes(db: Session = Depends(get_db)):
     nodes = db.query(Node).all()
     data = [{"tag": n.tag, "protocol": n.protocol, "raw_url": n.raw_url,
-              "parsed": json.loads(n.parsed_json), "schema_version": n.schema_version}
+              "parsed": json.loads(n.parsed_json), "schema_version": n.schema_version,
+              "country_code": n.country_code, "country_name": n.country_name,
+              "provider_name": n.provider_name, "provider_suggestion": n.provider_suggestion,
+              "notes": n.notes}
             for n in nodes]
     content = json.dumps(data, indent=2, ensure_ascii=False)
     return StreamingResponse(
@@ -568,10 +639,23 @@ async def import_nodes(nodes_json: Annotated[str, Form()], db: Session = Depends
                 ex.protocol = parsed.protocol
                 ex.parsed_json = json.dumps(parsed.to_dict())
                 ex.schema_version = parsed.schema_version
+                ex.country_code = item.get("country_code") or ex.country_code
+                ex.country_name = item.get("country_name") or ex.country_name
+                ex.provider_name = item.get("provider_name") or ex.provider_name
+                ex.provider_suggestion = item.get("provider_suggestion") or ex.provider_suggestion
+                ex.notes = item.get("notes") or ex.notes
             else:
-                db.add(Node(tag=parsed.tag, protocol=parsed.protocol, raw_url=parsed.raw_url,
+                node = Node(tag=parsed.tag, protocol=parsed.protocol, raw_url=parsed.raw_url,
                             parsed_json=json.dumps(parsed.to_dict()),
-                            schema_version=parsed.schema_version, active=False))
+                            schema_version=parsed.schema_version, active=False,
+                            country_code=item.get("country_code") or None,
+                            country_name=item.get("country_name") or None,
+                            provider_name=item.get("provider_name") or None,
+                            provider_suggestion=item.get("provider_suggestion") or None,
+                            notes=item.get("notes") or None)
+                if not node.country_code and not node.country_name:
+                    await _refresh_node_geo(node)
+                db.add(node)
             imported += 1
         except Exception as e:
             errors.append(f"{raw_url[:40]}: {e}")
@@ -592,9 +676,14 @@ async def logs_page(request: Request):
         lines = min(int(request.query_params.get("lines", "100")), 500)
     except ValueError:
         lines = 100
+    mode = request.query_params.get("mode", "all")
+    mode = mode if mode in {"all", "problems", "fatal"} else "all"
+    grep = request.query_params.get("grep", "")
     return templates.TemplateResponse(request, "logs.html", {
-        "log_text": svc.get_logs(lines),
+        "log_text": svc.get_logs(lines, mode=mode, grep=grep),
         "lines": lines,
+        "mode": mode,
+        "grep": grep,
     })
 
 
@@ -643,9 +732,12 @@ async def restore_backup_route(name: str, db: Session = Depends(get_db)):
 @app.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request, db: Session = Depends(get_db)):
     dns_p, route_p = _presets(db)
+    log_level = _singbox_log_level(db)
     return templates.TemplateResponse(request, "settings.html", {
         "dns_preset": dns_p,
         "route_preset": route_p,
+        "singbox_log_level": log_level,
+        "log_levels": LOG_LEVELS,
         "dns_presets": DNS_PRESETS,
         "route_presets": ROUTE_PRESETS,
         "notify_channels": notify.channels_status(),
@@ -658,14 +750,18 @@ async def settings_page(request: Request, db: Session = Depends(get_db)):
 async def save_settings(
     dns_preset: Annotated[str, Form()],
     route_preset: Annotated[str, Form()],
+    singbox_log_level: Annotated[str, Form()] = "warn",
     db: Session = Depends(get_db),
 ):
     if dns_preset not in DNS_PRESETS:
         return _redirect("/settings", msg=f"Invalid DNS preset", msg_type="error")
     if route_preset not in ROUTE_PRESETS:
         return _redirect("/settings", msg=f"Invalid route preset", msg_type="error")
+    if singbox_log_level not in LOG_LEVELS:
+        return _redirect("/settings", msg=f"Invalid log level", msg_type="error")
     _set_setting(db, "dns_preset", dns_preset)
     _set_setting(db, "route_preset", route_preset)
+    _set_setting(db, "singbox_log_level", singbox_log_level)
     db.query(Profile).update({"active": False})  # manual settings change = off-profile
     db.commit()
     return _redirect("/settings", msg="Saved. Re-activate node to apply.", msg_type="success")
@@ -752,7 +848,8 @@ async def activate_profile(profile_id: int, db: Session = Depends(get_db)):
     try:
         config = generate_config(parsed,
                                  dns_preset=profile.dns_preset,
-                                 route_preset=profile.route_preset)
+                                 route_preset=profile.route_preset,
+                                 log_level=_singbox_log_level(db))
     except Exception as e:
         return _redirect("/profiles", msg=f"Config generation failed: {e}", msg_type="error")
 

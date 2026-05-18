@@ -94,6 +94,19 @@ def test_log_timestamp():
     assert generate_config(parse_vless(VLESS_URL))["log"]["timestamp"] is True
 
 
+def test_log_level_defaults_to_warn():
+    assert generate_config(parse_vless(VLESS_URL))["log"]["level"] == "warn"
+
+
+def test_log_level_can_be_info():
+    assert generate_config(parse_vless(VLESS_URL), log_level="info")["log"]["level"] == "info"
+
+
+def test_invalid_log_level_raises():
+    with pytest.raises(ValueError, match="log level"):
+        generate_config(parse_vless(VLESS_URL), log_level="verbose")
+
+
 def test_bypass_lan_preset_has_private_ip_rule():
     cfg = generate_config(parse_vless(VLESS_URL), route_preset="bypass_lan")
     rules = cfg["route"]["rules"]

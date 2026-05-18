@@ -9,8 +9,17 @@
     <a href="/logs?lines=50"  class="btn btn-outline {% if lines == 50  %}btn-active{% endif %}">50</a>
     <a href="/logs?lines=100" class="btn btn-outline {% if lines == 100 %}btn-active{% endif %}">100</a>
     <a href="/logs?lines=200" class="btn btn-outline {% if lines == 200 %}btn-active{% endif %}">200</a>
+    <a href="/logs?lines={{ lines }}&mode=all&grep={{ grep | urlencode }}" class="btn btn-outline {% if mode == 'all' %}btn-active{% endif %}">All</a>
+    <a href="/logs?lines={{ lines }}&mode=problems&grep={{ grep | urlencode }}" class="btn btn-outline {% if mode == 'problems' %}btn-active{% endif %}">Warnings/Errors</a>
+    <a href="/logs?lines={{ lines }}&mode=fatal&grep={{ grep | urlencode }}" class="btn btn-outline {% if mode == 'fatal' %}btn-active{% endif %}">Fatal/Error</a>
+    <form method="get" action="/logs" class="log-filter-form">
+      <input type="hidden" name="lines" value="{{ lines }}">
+      <input type="hidden" name="mode" value="{{ mode }}">
+      <input name="grep" value="{{ grep }}" placeholder="grep">
+      <button class="btn btn-outline" type="submit">Filter</button>
+    </form>
     <button class="btn btn-primary"
-            hx-get="/api/logs?lines={{ lines }}"
+            hx-get="/api/logs?lines={{ lines }}&mode={{ mode }}&grep={{ grep | urlencode }}"
             hx-target="#log-container"
             hx-swap="innerHTML">↻ Refresh</button>
   </div>

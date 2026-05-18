@@ -6,8 +6,10 @@ Local web UI for managing [sing-box](https://sing-box.sagernet.org/) on Manjaro/
 - **Profiles** — bundle node + DNS + route into one-click activate
 - **Auth** — optional single-admin password with signed session cookies
 - **Notifications** — desktop popups, Telegram, ntfy.sh on key events
-- Dashboard: service status, external IP, config diff, recent logs
+- Dashboard: service status, quick node switch, external IP, config diff, recent problems
+- Light / dark / system theme switcher
 - DNS and route presets (Quad9/Cloudflare/Google DoT, full tunnel / bypass LAN / bypass RU)
+- Node metadata: country lookup, provider label, notes
 - Config backups and one-click restore
 - Deploy journal — every attempt logged to DB
 - Health monitoring — background checks every 5 min, latency history charts
@@ -37,7 +39,7 @@ FastAPI app  127.0.0.1:9090
   │
   ├─ singbox/
   │   ├─ generator    ParsedNode + DNS preset + route preset → config dict
-  │   ├─ deployer     validate → deploy → reload → healthcheck → rollback
+  │   ├─ deployer     validate → deploy → restart → healthcheck → rollback
   │   │               asyncio.Lock prevents concurrent deploys
   │   ├─ service      start / stop / restart / reload / status / logs / version
   │   └─ validator    calls `sing-box check` on a temp file (no root)
@@ -86,15 +88,13 @@ cd ~/path/to/local-singbox-manager
 ### 2. Create virtualenv and install dependencies
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+make install
 ```
 
 For e2e tests, also install browser binaries (one-time):
 
 ```bash
-playwright install chromium
+.venv/bin/playwright install chromium
 ```
 
 ### 3. Install the privileged helper
@@ -153,9 +153,12 @@ HELPER_BIN=/usr/local/bin/singbox-manager-helper
 ### 7. Run
 
 ```bash
-source .venv/bin/activate
-uvicorn app.main:app --host 127.0.0.1 --port 9090
+make run
 ```
+
+Virtualenv activation is not required for normal local use: `make run`
+calls `.venv/bin/uvicorn` directly and loads `.env` when present, so it works
+the same in every new terminal.
 
 Open **http://127.0.0.1:9090**
 
@@ -166,12 +169,33 @@ The app runs Alembic migrations automatically on startup — the SQLite database
 
 ## Run as a systemd service
 
+One-shot install from a normal terminal:
+
 ```bash
-# Review WorkingDirectory, ExecStart, and Environment= lines in the unit file first
+bash scripts/install-systemd.sh
+```
+
+Manual equivalent:
+
+```bash
+# Review WorkingDirectory, ExecStart, and EnvironmentFile lines in the unit file first
+make install
+sudo install -o root -g root -m 755 scripts/singbox-manager-helper /usr/local/bin/singbox-manager-helper
+sudo install -o root -g root -m 440 sudoers.d/singbox-manager /etc/sudoers.d/singbox-manager
+sudo visudo -c
+sudo mkdir -p /etc/sing-box/backups
 sudo cp singbox-manager.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now singbox-manager.service
 sudo systemctl status singbox-manager.service
+```
+
+The service reads environment variables from the project `.env` file via
+`EnvironmentFile=-/home/nikita/Documents/projects/own/local-singbox-manager/.env`.
+After changing `.env`, restart the service:
+
+```bash
+sudo systemctl restart singbox-manager.service
 ```
 
 ---
@@ -182,8 +206,7 @@ sudo systemctl status singbox-manager.service
 
 ```bash
 git pull
-source .venv/bin/activate
-pip install -r requirements.txt   # picks up any new deps
+make install   # picks up any new deps
 # migrations run automatically on next app start
 ```
 
@@ -230,8 +253,8 @@ Click **Activate** on any node. The pipeline runs:
 ```
 1. validate     sing-box check on a temp file (no root, read-only)
 2. deploy       helper: backup current config → install new config
-3. reload       systemctl reload (falls back to restart if not configured)
-4. health       wait 3s → systemctl is-active sing-box.service
+3. restart      systemctl restart sing-box.service
+4. health       retry/backoff → systemctl is-active sing-box.service
                 (lightweight check — not the full diagnostics suite)
 5. ok           mark node active in DB, log to DeployLog
 
@@ -240,6 +263,9 @@ on any failure after step 2:
 ```
 
 A notification is sent on success, on each failure stage, and on rollback.
+
+`reload` is intentionally not used for deploys: TUN configs can fail on reload
+with `TUNSETIFF: device or resource busy` while the old interface is still open.
 
 ### Profiles
 
@@ -274,6 +300,22 @@ The `bypass_ru` preset downloads remote `.srs` rule-sets from SagerNet's CDN
 startup and refreshes every 7 days. No local geo database needed.
 
 Changes take effect on the next **Activate** (or via a Profile).
+
+### sing-box log level
+
+Generated configs use `warn` by default to avoid journald being flooded by
+per-connection TUN logs. Change **Settings → sing-box Log Level** to `info` or
+`debug` only when diagnosing a problem, then re-activate a node.
+
+The **Logs** page supports `All`, `Warnings/Errors`, `Fatal/Error`, and text
+grep filters. Dashboard shows only recent problems.
+
+### Node metadata
+
+Nodes can store country, provider, and notes. Country is looked up once when a
+node is added or when **Refresh Geo** is clicked. Provider is manual; automatic
+ASN/org data is shown only as a suggestion because provider display names often
+differ from registry names.
 
 ### Config diff
 
@@ -385,7 +427,7 @@ Every deploy attempt is recorded in the `deploy_log` table:
 | `node_tag` | Which node was being activated |
 | `config_hash` | sha256 of the generated config (canonical JSON) |
 | `backup_name` | Backup filename created before deploy |
-| `stage_reached` | Last stage: `validate \| deploy \| reload \| health \| ok` |
+| `stage_reached` | Last stage: `validate \| deploy \| restart \| health \| ok` |
 | `success` | Whether deploy completed successfully |
 | `rolled_back` | Whether auto-rollback was triggered |
 | `error` | Error message if failed |
@@ -402,8 +444,7 @@ sqlite3 singbox_manager.db \
 ### Unit tests (no root, no sing-box required)
 
 ```bash
-source .venv/bin/activate
-pytest tests/ --ignore=tests/e2e -v
+make test
 ```
 
 **207 tests** covering:
@@ -425,8 +466,7 @@ pytest tests/ --ignore=tests/e2e -v
 ### E2e tests (Playwright, no root required)
 
 ```bash
-source .venv/bin/activate
-pytest tests/e2e --browser chromium -v
+make e2e
 ```
 
 **50 tests** — starts a real uvicorn server on port 19090 with an isolated temp
@@ -541,7 +581,7 @@ Run install step 3. Verify: `ls -la /usr/local/bin/singbox-manager-helper`
 **"sing-box binary not found … set the SINGBOX_BIN env var"**
 sing-box is not at `/usr/bin/sing-box`. Either install it there or:
 ```bash
-SINGBOX_BIN=/usr/local/bin/sing-box uvicorn app.main:app --host 127.0.0.1 --port 9090
+SINGBOX_BIN=/usr/local/bin/sing-box make run
 ```
 
 **sudo password prompt or "no password supplied"**

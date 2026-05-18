@@ -97,6 +97,7 @@ def generate_config(
     node: ParsedNode,
     dns_preset: str = DEFAULT_DNS_PRESET,
     route_preset: str = DEFAULT_ROUTE_PRESET,
+    log_level: str = "warn",
 ) -> dict[str, Any]:
     if dns_preset not in DNS_PRESETS:
         raise ValueError(f"Unknown DNS preset: {dns_preset!r}")
@@ -108,8 +109,11 @@ def generate_config(
     route = copy.deepcopy(ROUTE_PRESETS[route_preset]["route"])
     route["final"] = active["tag"]
 
+    if log_level not in {"error", "warn", "info", "debug"}:
+        raise ValueError(f"Unknown sing-box log level: {log_level!r}")
+
     return {
-        "log": {"level": "info", "timestamp": True},
+        "log": {"level": log_level, "timestamp": True},
         "dns": copy.deepcopy(DNS_PRESETS[dns_preset]["config"]),
         "inbounds": [copy.deepcopy(_TUN_INBOUND)],
         "route": route,

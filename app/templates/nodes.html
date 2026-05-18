@@ -33,38 +33,57 @@ hysteria2://password@host:port?sni=HOST#tag" required></textarea>
   <table>
     <thead>
       <tr>
-        <th>Tag</th><th>Protocol</th><th>Server</th><th>Status</th><th>Extras</th><th>Actions</th>
+        <th>Node</th><th>Metadata</th><th>Deploy</th><th>Actions</th>
       </tr>
     </thead>
     <tbody>
       {% for node in nodes %}
       {% set parsed = node.parsed_json | fromjson %}
-      <tr>
-        <td><strong>{{ node.tag }}</strong></td>
-        <td><span class="badge badge-blue">{{ node.protocol }}</span></td>
-        <td class="text-dim">{{ parsed.server }}:{{ parsed.port }}</td>
+      {% set log = latest_logs.get(node.tag) %}
+      <tr class="{% if node.active %}row-active{% endif %}">
         <td>
+          <strong>{{ node.tag }}</strong>
+          <span class="badge badge-blue">{{ node.protocol }}</span>
           {% if node.active %}
             <span class="badge badge-green">active</span>
-          {% else %}
-            <span class="badge badge-gray">inactive</span>
           {% endif %}
+          <div class="text-dim">{{ parsed.server }}:{{ parsed.port }}</div>
         </td>
-        <td class="text-dim">
-          {% if parsed.extra_params %}
-            <span title="{{ parsed.extra_params | tojson }}">{{ parsed.extra_params | length }} unknown</span>
-          {% else %}—{% endif %}
+        <td>
+          <form method="post" action="/nodes/{{ node.id }}/metadata" class="inline-edit metadata-edit">
+            <div class="inline-pair">
+            <input name="country_code" value="{{ node.country_code or '' }}" placeholder="KZ" maxlength="8">
+            <input name="country_name" value="{{ node.country_name or '' }}" placeholder="Country">
+            </div>
+            <input name="provider_name" value="{{ node.provider_name or '' }}" placeholder="Provider">
+            {% if node.provider_suggestion %}
+              <div class="text-dim">Suggestion: {{ node.provider_suggestion }}</div>
+            {% endif %}
+            <textarea name="notes" rows="2" placeholder="Notes">{{ node.notes or '' }}</textarea>
+            <button type="submit" class="btn btn-outline btn-sm">Save</button>
+          </form>
+        </td>
+        <td>
+          {% if log %}
+            <span class="badge {% if log.success %}badge-green{% else %}badge-red{% endif %}">{{ log.stage_reached }}</span>
+            {% if log.error %}<div class="text-dim" title="{{ log.error }}">{{ log.error[:80] }}</div>{% endif %}
+          {% else %}
+            <span class="text-dim">—</span>
+          {% endif %}
         </td>
         <td>
           <div class="actions">
             {% if not node.active %}
             <form method="post" action="/nodes/{{ node.id }}/activate">
-              <button type="submit" class="btn btn-success">Activate</button>
+              <button type="submit" class="btn btn-success btn-sm">Activate</button>
             </form>
             {% endif %}
+            <form method="post" action="/nodes/{{ node.id }}/refresh-geo">
+              <button type="submit" class="btn btn-outline btn-sm">Refresh Geo</button>
+            </form>
             <form method="post" action="/nodes/{{ node.id }}/delete"
                   onsubmit="return confirm('Delete node {{ node.tag | e }}?')">
-              <button type="submit" class="btn btn-danger">Delete</button>
+              <button type="submit" class="btn btn-danger btn-sm">Delete</button>
             </form>
           </div>
         </td>

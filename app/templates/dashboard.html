@@ -69,6 +69,61 @@
 </div>
 
 <div class="card">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px;flex-wrap:wrap">
+    <h2 style="margin:0">Quick Switch</h2>
+    <a href="/nodes" class="btn btn-outline btn-sm">Manage Nodes</a>
+  </div>
+  {% if nodes %}
+  <table>
+    <thead>
+      <tr>
+        <th>Node</th><th>Location</th><th>Provider</th><th>Last Deploy</th><th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for node in nodes %}
+      {% set parsed = node.parsed_json | fromjson %}
+      {% set log = latest_logs.get(node.tag) %}
+      <tr class="{% if node.active %}row-active{% endif %}">
+        <td>
+          <strong>{{ node.tag }}</strong>
+          <span class="badge badge-blue">{{ node.protocol }}</span>
+          <div class="text-dim">{{ parsed.server }}:{{ parsed.port }}</div>
+        </td>
+        <td>
+          {% if node.country_code or node.country_name %}
+            {{ node.country_code or "" }}{% if node.country_name %}<span class="text-dim"> · {{ node.country_name }}</span>{% endif %}
+          {% else %}
+            <span class="text-dim">—</span>
+          {% endif %}
+        </td>
+        <td>{{ node.provider_name or node.provider_suggestion or "—" }}</td>
+        <td>
+          {% if log %}
+            <span class="badge {% if log.success %}badge-green{% else %}badge-red{% endif %}">{{ log.stage_reached }}</span>
+          {% else %}
+            <span class="text-dim">—</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if node.active %}
+            <span class="badge badge-green">active</span>
+          {% else %}
+            <form method="post" action="/nodes/{{ node.id }}/activate">
+              <button class="btn btn-success btn-sm" type="submit">Activate</button>
+            </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="text-dim">No nodes yet.</p>
+  {% endif %}
+</div>
+
+<div class="card">
   <h2>Config Diff <span class="text-dim">(deployed vs pending)</span></h2>
   <div id="diff-display" hx-get="/api/diff" hx-trigger="load" hx-swap="innerHTML">
     <span class="text-dim">Loading…</span>
@@ -80,13 +135,13 @@
 </div>
 
 <div class="card">
-  <h2>Recent Logs</h2>
-  <div id="log-snippet" hx-get="/api/logs?lines=30" hx-trigger="load" hx-swap="innerHTML">
+  <h2>Recent Problems</h2>
+  <div id="log-snippet" hx-get="/api/logs?lines=300&mode=problems" hx-trigger="load" hx-swap="innerHTML">
     <span class="text-dim">Loading…</span>
   </div>
   <div style="margin-top:10px;display:flex;gap:8px">
     <button class="btn btn-outline"
-            hx-get="/api/logs?lines=30" hx-target="#log-snippet" hx-swap="innerHTML">↻ Refresh</button>
+            hx-get="/api/logs?lines=300&mode=problems" hx-target="#log-snippet" hx-swap="innerHTML">↻ Refresh</button>
     <a href="/logs" class="btn btn-outline">Full Logs →</a>
   </div>
 </div>

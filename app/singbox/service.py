@@ -2,6 +2,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+from typing import Literal
 
 from app.logging_config import get_logger
 
@@ -9,6 +10,23 @@ HELPER_BIN = os.environ.get("HELPER_BIN", "/usr/local/bin/singbox-manager-helper
 SINGBOX_BIN = os.environ.get("SINGBOX_BIN", "/usr/bin/sing-box")
 
 _log = get_logger(__name__)
+
+LogFilter = Literal["all", "problems", "fatal"]
+
+_PROBLEM_RE = re.compile(r"(warning|error|fatal|failed|invalid|panic|TUNSETIFF)", re.IGNORECASE)
+_FATAL_RE = re.compile(r"(error|fatal|failed|invalid|panic|TUNSETIFF)", re.IGNORECASE)
+
+
+def _filter_log_lines(text: str, mode: LogFilter = "all", grep: str = "") -> str:
+    lines = text.splitlines()
+    if mode == "problems":
+        lines = [line for line in lines if _PROBLEM_RE.search(line)]
+    elif mode == "fatal":
+        lines = [line for line in lines if _FATAL_RE.search(line)]
+    if grep:
+        needle = grep.lower()
+        lines = [line for line in lines if needle in line.lower()]
+    return "\n".join(lines) or "(no matching log output)"
 
 
 def _run_helper(*args: str, timeout: int = 30) -> tuple[bool, str]:
@@ -51,16 +69,35 @@ def get_status() -> dict:
                 "load_state": "error", "since": ""}
 
 
-def get_logs(lines: int = 100) -> str:
+def get_logs(lines: int = 100, mode: LogFilter = "all", grep: str = "") -> str:
     try:
         result = subprocess.run(
             ["journalctl", "-u", "sing-box.service", "-n", str(lines),
              "--no-pager", "--output=short-iso"],
             capture_output=True, text=True, timeout=10,
         )
-        return result.stdout or "(no log output)"
+        output = result.stdout or "(no log output)"
+        return _filter_log_lines(output, mode=mode, grep=grep)
     except Exception as e:
         return f"Error fetching logs: {e}"
+
+
+def get_recent_problems(lines: int = 300) -> str:
+    return get_logs(lines=lines, mode="problems")
+
+
+def get_failure_detail(lines: int = 200, since: str = "") -> str:
+    cmd = ["journalctl", "-u", "sing-box.service", "-n", str(lines), "--no-pager", "--output=short-iso"]
+    if since:
+        cmd = ["journalctl", "-u", "sing-box.service", "--since", since, "--no-pager", "--output=short-iso"]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        output = _filter_log_lines(result.stdout, mode="fatal")
+        if output.startswith("(no matching"):
+            return ""
+        return output.splitlines()[-1][-500:]
+    except Exception:
+        return ""
 
 
 def _log_action(action: str, ok: bool, out: str) -> None:

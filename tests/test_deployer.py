@@ -23,6 +23,12 @@ from app.singbox.deployer import (
 )
 
 
+@pytest.fixture(autouse=True)
+def quiet_notifications():
+    with patch("app.singbox.deployer._notify", return_value=None):
+        yield
+
+
 # ── config_hash ───────────────────────────────────────────────────────────────
 
 def test_config_hash_deterministic():
@@ -137,14 +143,14 @@ async def test_deploy_helper_failure_no_rollback():
 
 
 @pytest.mark.asyncio
-async def test_deploy_reload_failure_triggers_rollback():
+async def test_deploy_restart_failure_triggers_rollback():
     call_count = {"n": 0}
 
     def helper_side_effect(*args, **kwargs):
         call_count["n"] += 1
         if args[0] == "deploy":
             return True, "Backup: config_20240101_120000.json"
-        if args[0] in ("reload", "restart"):
+        if args[0] == "restart":
             return False, "unit failed"
         if args[0] == "restore":
             return True, "restored"
@@ -155,12 +161,15 @@ async def test_deploy_reload_failure_triggers_rollback():
                                   return_value=(True, "ok")))
         stack.enter_context(patch("app.singbox.deployer._run_helper",
                                   side_effect=helper_side_effect))
+        stack.enter_context(patch("app.singbox.service.get_failure_detail",
+                                  return_value="FATAL TUNSETIFF busy"))
         result = await deploy_with_rollback({"a": 1}, "node", health_check=False)
 
     assert result.success is False
-    assert result.stage == "reload"
+    assert result.stage == "restart"
     assert result.rolled_back is True
     assert result.backup_name == "config_20240101_120000.json"
+    assert "TUNSETIFF" in result.error
 
 
 @pytest.mark.asyncio
@@ -168,7 +177,7 @@ async def test_deploy_health_check_failure_triggers_rollback():
     def helper_side_effect(*args, **kwargs):
         if args[0] == "deploy":
             return True, "config_20240101_120000.json"
-        if args[0] in ("reload", "restart"):
+        if args[0] == "restart":
             return True, "ok"
         if args[0] == "restore":
             return True, "restored"
@@ -181,12 +190,15 @@ async def test_deploy_health_check_failure_triggers_rollback():
                                   side_effect=helper_side_effect))
         stack.enter_context(patch("app.singbox.deployer._service_is_active",
                                   return_value=False))
+        stack.enter_context(patch("app.singbox.service.get_failure_detail",
+                                  return_value="FATAL bad outbound"))
         stack.enter_context(patch("asyncio.sleep", return_value=None))
         result = await deploy_with_rollback({"a": 1}, "node", health_check=True)
 
     assert result.success is False
     assert result.stage == "health"
     assert result.rolled_back is True
+    assert "bad outbound" in result.error
 
 
 @pytest.mark.asyncio

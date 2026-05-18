@@ -7,10 +7,12 @@ import re
 import subprocess
 import uuid as _uuid
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Optional
 
 from app.logging_config import get_logger
 from app.notify import fire as _notify
+from app.singbox import service as svc
 from app.singbox.validator import validate_config
 
 _log = get_logger(__name__)
@@ -30,7 +32,7 @@ def config_hash(config: dict) -> str:
 @dataclass
 class DeployResult:
     success: bool
-    stage: str = ""          # validate | deploy | reload | health | ok
+    stage: str = ""          # validate | deploy | restart | health | ok
     error: str = ""
     rolled_back: bool = False
     backup_name: Optional[str] = None
@@ -81,6 +83,14 @@ def _service_is_active() -> bool:
         return False
 
 
+async def _wait_service_active(attempts: int = 6, delay: float = 1.0) -> bool:
+    for _ in range(attempts):
+        if _service_is_active():
+            return True
+        await asyncio.sleep(delay)
+    return False
+
+
 def _do_rollback(backup_name: str) -> tuple[bool, str]:
     _log.warning("Rolling back: restoring %s", backup_name)
     ok, out = _run_helper("restore", backup_name)
@@ -111,6 +121,7 @@ async def deploy_with_rollback(
 
 async def _run_deploy(config: dict, node_tag: str, health_check: bool) -> DeployResult:
     cfg_hash = config_hash(config)
+    deploy_started = datetime.now() - timedelta(seconds=2)
     _log.info("Deploy starting: node=%s hash=%.8s", node_tag, cfg_hash)
 
     # 1. Validate before touching anything
@@ -140,34 +151,39 @@ async def _run_deploy(config: dict, node_tag: str, health_check: bool) -> Deploy
 
     backup_name = _extract_backup_name(output)
 
-    # 3. Reload/restart service
-    ok, err = _run_helper("reload")
+    # 3. Restart service. TUN configs should not use reload: sing-box may try to
+    # re-open the existing TUN interface and fail with TUNSETIFF busy.
+    ok, err = _run_helper("restart")
     if not ok:
-        ok, err = _run_helper("restart")  # fallback if ExecReload not configured
-    if not ok:
-        _log.warning("Service reload/restart failed: %s", err)
-        _notify("✗ Deploy failed", f"Stage: reload — {err}", "critical")
+        _log.warning("Service restart failed: %s", err)
+        detail = svc.get_failure_detail(since=deploy_started.strftime("%Y-%m-%d %H:%M:%S"))
+        if detail:
+            err = f"{err} | {detail}"
+        _notify("✗ Deploy failed", f"Stage: restart — {err}", "critical")
         rolled_back = False
         if backup_name:
             rolled_back, _ = _do_rollback(backup_name)
         return DeployResult(
-            success=False, stage="reload", error=err,
+            success=False, stage="restart", error=err,
             rolled_back=rolled_back, backup_name=backup_name,
             config_hash=cfg_hash,
         )
 
     # 4. Health check — wait for service to stabilise, then verify active
     if health_check:
-        await asyncio.sleep(3)
-        if not _service_is_active():
-            _log.warning("Health check failed: sing-box.service not active after restart")
-            _notify("✗ Deploy failed", "Stage: health — service not active after restart", "critical")
+        if not await _wait_service_active():
+            detail = svc.get_failure_detail(since=deploy_started.strftime("%Y-%m-%d %H:%M:%S"))
+            error = "sing-box.service not active after restart"
+            if detail:
+                error = f"{error}: {detail}"
+            _log.warning("Health check failed: %s", error)
+            _notify("✗ Deploy failed", f"Stage: health — {error}", "critical")
             rolled_back = False
             if backup_name:
                 rolled_back, _ = _do_rollback(backup_name)
             return DeployResult(
                 success=False, stage="health",
-                error="sing-box.service not active after restart",
+                error=error,
                 rolled_back=rolled_back, backup_name=backup_name,
                 config_hash=cfg_hash,
             )

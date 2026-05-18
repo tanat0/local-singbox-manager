@@ -1,9 +1,22 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}Sing-Box Manager{% endblock %}</title>
+  <script>
+    (function() {
+      var choice = localStorage.getItem('sb-theme') || 'system';
+      function resolvedTheme(value) {
+        if (value === 'system') {
+          return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        }
+        return value === 'light' ? 'light' : 'dark';
+      }
+      document.documentElement.dataset.theme = resolvedTheme(choice);
+      document.documentElement.dataset.themeChoice = choice;
+    })();
+  </script>
   <link rel="stylesheet" href="/static/style.css">
   <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" defer></script>
 </head>
@@ -28,11 +41,18 @@
       <a href="/backups"     {% if p.startswith("/backups") %}class="nav-active"{% endif %}>Backups</a>
       <a href="/settings"    {% if p.startswith("/settings") %}class="nav-active"{% endif %}>Settings</a>
     </div>
-    {% if auth_enabled %}
-    <form method="post" action="/logout" style="margin:0">
-      <button class="btn btn-outline btn-sm">Logout</button>
-    </form>
-    {% endif %}
+    <div class="nav-actions">
+      <select id="theme-select" class="select-sm" aria-label="Theme">
+        <option value="system">System</option>
+        <option value="dark">Dark</option>
+        <option value="light">Light</option>
+      </select>
+      {% if auth_enabled %}
+      <form method="post" action="/logout" style="margin:0">
+        <button class="btn btn-outline btn-sm">Logout</button>
+      </form>
+      {% endif %}
+    </div>
   </nav>
 
   <main>
@@ -61,6 +81,28 @@
         window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname);
       }
     });
+
+    (function() {
+      var select = document.getElementById('theme-select');
+      if (!select) return;
+      function resolvedTheme(value) {
+        if (value === 'system') {
+          return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        }
+        return value === 'light' ? 'light' : 'dark';
+      }
+      function apply(value) {
+        localStorage.setItem('sb-theme', value);
+        document.documentElement.dataset.theme = resolvedTheme(value);
+        document.documentElement.dataset.themeChoice = value;
+        select.value = value;
+      }
+      apply(localStorage.getItem('sb-theme') || 'system');
+      select.addEventListener('change', function() { apply(select.value); });
+      window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', function() {
+        if ((localStorage.getItem('sb-theme') || 'system') === 'system') apply('system');
+      });
+    })();
   </script>
 </body>
 </html>
