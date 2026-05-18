@@ -10,6 +10,7 @@ Local web UI for managing [sing-box](https://sing-box.sagernet.org/) on Manjaro/
 - Light / dark / system theme switcher
 - DNS and route presets (Quad9/Cloudflare/Google DoT, full tunnel / bypass LAN / bypass RU)
 - Node metadata: country lookup, provider label, notes
+- User distribution groundwork: config groups and managed Telegram user IDs
 - Config backups and one-click restore
 - Deploy journal — every attempt logged to DB
 - Health monitoring — background checks every 5 min, latency history charts
@@ -47,6 +48,7 @@ FastAPI app  127.0.0.1:9090
   │
   ├─ health.py        async service + TUN + DNS + TCP + HTTPS checks,
   │                   external IP via fallback chain; runs every 5 min
+  ├─ routes/users.py  config groups + managed users for future config delivery
   │
   ├─ logging_config.py  structured logging (INFO for operations,
   │                     WARNING for degraded/failed conditions, no DEBUG spam)
@@ -407,6 +409,17 @@ Only IDs listed in `TELEGRAM_ADMIN_IDS` are allowed. Denied and accepted admin
 actions are written to `admin_action_log`. The bot reuses the same deploy
 pipeline as the web UI: validation, restart, health check, rollback, deploy log,
 and notifications.
+
+## User Distribution Groundwork
+
+The **Users** page stores config groups and managed Telegram user IDs for the
+future user-facing bot flow. It does not send configs yet.
+
+- Config groups contain a name, enabled flag, allowed node tags, and notes.
+- Managed users contain Telegram ID, display name, enabled flag, assigned group,
+  and notes.
+- Later `/config` and `/refresh` commands will use this data to decide what a
+  non-admin user may receive.
 
 **Events:**
 

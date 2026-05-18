@@ -28,6 +28,7 @@ The project stays local-client focused first: stable deploys, clear logs, mainta
 
 ## Phase 2: User Config Distribution
 
+- Add base web management for config groups and managed Telegram user IDs.
 - Add a users table: Telegram ID, display name, enabled flag, allowed config groups.
 - User commands:
   - `/config`: get assigned config or proxy.

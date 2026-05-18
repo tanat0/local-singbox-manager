@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Float, Integer, String, Boolean, DateTime, Text
+from sqlalchemy import Column, Float, ForeignKey, Integer, String, Boolean, DateTime, Text
 from sqlalchemy.sql import func
 from app.db import Base
 
@@ -81,3 +81,28 @@ class AdminActionLog(Base):
     action = Column(String, nullable=False)
     success = Column(Boolean, nullable=False)
     detail = Column(Text, nullable=True)
+
+
+class ConfigGroup(Base):
+    __tablename__ = "config_groups"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, unique=True, nullable=False)
+    description = Column(Text, nullable=True)
+    enabled = Column(Boolean, default=True, nullable=False)
+    # JSON array of node tags. Empty means the group exists but has no configs assigned yet.
+    node_tags_json = Column(Text, nullable=False, default="[]")
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class ManagedUser(Base):
+    __tablename__ = "managed_users"
+
+    id = Column(Integer, primary_key=True)
+    telegram_id = Column(String, unique=True, nullable=False)
+    display_name = Column(String, nullable=True)
+    enabled = Column(Boolean, default=True, nullable=False)
+    config_group_id = Column(Integer, ForeignKey("config_groups.id"), nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

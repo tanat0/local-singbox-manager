@@ -18,7 +18,7 @@ from app.db import SessionLocal
 from app.health import run_health_checks
 from app.logging_config import get_logger, setup_logging
 from app.models import HealthCheckLog
-from app.routes import dashboard, logs, nodes, profiles, settings, system
+from app.routes import dashboard, logs, nodes, profiles, settings, system, users
 from app.telegram_admin import create_bot_from_env
 from app.version import VERSION
 from app.web import BASE_DIR
@@ -109,5 +109,6 @@ app.include_router(system.router)
 app.include_router(dashboard.router)
 app.include_router(nodes.router)
 app.include_router(logs.router)
+app.include_router(users.router)
 app.include_router(settings.router)
 app.include_router(profiles.router)

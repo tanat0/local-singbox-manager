@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% block title %}Users — Sing-Box Manager{% endblock %}
+{% block content %}
+
+<h1>Users</h1>
+
+{% if msg %}
+<div class="alert alert-{{ msg_type }}">{{ msg }}</div>
+{% endif %}
+
+<div class="card-grid card-grid-2">
+  <div class="card">
+    <h2>Create Config Group</h2>
+    <form method="post" action="/users/groups">
+      <div class="form-group">
+        <label>Name</label>
+        <input name="name" placeholder="family" required>
+      </div>
+      <div class="form-group">
+        <label>Description</label>
+        <input name="description" placeholder="Shared configs for family devices">
+      </div>
+      <div class="form-group">
+        <label>Allowed Node Tags</label>
+        <textarea name="node_tags" rows="3" placeholder="node-tag-1, node-tag-2"></textarea>
+      </div>
+      <div class="form-group">
+        <label>Notes</label>
+        <textarea name="notes" rows="2"></textarea>
+      </div>
+      <label class="checkbox-row">
+        <input type="checkbox" name="enabled" checked>
+        Enabled
+      </label>
+      <button type="submit" class="btn btn-primary mt-md">Create Group</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Create User</h2>
+    <form method="post" action="/users">
+      <div class="form-group">
+        <label>Telegram ID</label>
+        <input name="telegram_id" placeholder="123456789" required>
+      </div>
+      <div class="form-group">
+        <label>Display Name</label>
+        <input name="display_name" placeholder="Alex">
+      </div>
+      <div class="form-group">
+        <label>Config Group</label>
+        <select name="config_group_id">
+          <option value="">None</option>
+          {% for group in groups %}
+          <option value="{{ group.id }}">{{ group.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Notes</label>
+        <textarea name="notes" rows="3"></textarea>
+      </div>
+      <label class="checkbox-row">
+        <input type="checkbox" name="enabled" checked>
+        Enabled
+      </label>
+      <button type="submit" class="btn btn-primary mt-md">Create User</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <h2>Config Groups ({{ groups | length }})</h2>
+  </div>
+  {% if groups %}
+  <table>
+    <thead>
+      <tr>
+        <th>Group</th><th>Allowed Nodes</th><th>Notes</th><th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for group in groups %}
+      {% set tags = decode_node_tags(group.node_tags_json) %}
+      <tr>
+        <td>
+          <div class="inline-edit metadata-edit">
+            <input form="group-form-{{ group.id }}" name="name" value="{{ group.name }}" required>
+            <input form="group-form-{{ group.id }}" name="description" value="{{ group.description or '' }}" placeholder="Description">
+            <label class="checkbox-row">
+              <input form="group-form-{{ group.id }}" type="checkbox" name="enabled" {% if group.enabled %}checked{% endif %}>
+              Enabled
+            </label>
+          </div>
+        </td>
+        <td>
+            <textarea form="group-form-{{ group.id }}" class="table-textarea" name="node_tags" rows="3" placeholder="node-tag-1, node-tag-2">{{ tags | join(', ') }}</textarea>
+            {% if not tags %}
+              <div class="text-dim">No nodes assigned yet.</div>
+            {% endif %}
+        </td>
+        <td>
+            <textarea form="group-form-{{ group.id }}" class="table-textarea" name="notes" rows="3" placeholder="Notes">{{ group.notes or '' }}</textarea>
+        </td>
+        <td>
+            <div class="actions table-actions">
+              <form id="group-form-{{ group.id }}" method="post" action="/users/groups/{{ group.id }}"></form>
+              <button form="group-form-{{ group.id }}" type="submit" class="btn btn-outline btn-sm">Save</button>
+              <form method="post" action="/users/groups/{{ group.id }}/delete"
+                    onsubmit="return confirm('Delete group {{ group.name | e }}? Users will keep no group.')">
+                <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+              </form>
+            </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="text-dim">No config groups yet.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <h2>Managed Users ({{ users | length }})</h2>
+  </div>
+  {% if users %}
+  <table>
+    <thead>
+      <tr>
+        <th>User</th><th>Group</th><th>Status</th><th>Notes</th><th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for user in users %}
+      <tr>
+        <td>
+          <div class="inline-edit metadata-edit">
+            <input form="user-form-{{ user.id }}" name="telegram_id" value="{{ user.telegram_id }}" required>
+            <input form="user-form-{{ user.id }}" name="display_name" value="{{ user.display_name or '' }}" placeholder="Display name">
+          </div>
+        </td>
+        <td>
+            <select form="user-form-{{ user.id }}" name="config_group_id">
+              <option value="">None</option>
+              {% for group in groups %}
+              <option value="{{ group.id }}" {% if user.config_group_id == group.id %}selected{% endif %}>{{ group.name }}</option>
+              {% endfor %}
+            </select>
+        </td>
+        <td>
+            <label class="checkbox-row">
+              <input form="user-form-{{ user.id }}" type="checkbox" name="enabled" {% if user.enabled %}checked{% endif %}>
+              Enabled
+            </label>
+        </td>
+        <td>
+            <textarea form="user-form-{{ user.id }}" class="table-textarea" name="notes" rows="2" placeholder="Notes">{{ user.notes or '' }}</textarea>
+        </td>
+        <td>
+            <div class="actions table-actions">
+              <form id="user-form-{{ user.id }}" method="post" action="/users/{{ user.id }}"></form>
+              <button form="user-form-{{ user.id }}" type="submit" class="btn btn-outline btn-sm">Save</button>
+              <form method="post" action="/users/{{ user.id }}/delete"
+                    onsubmit="return confirm('Delete user {{ (user.display_name or user.telegram_id) | e }}?')">
+                <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+              </form>
+            </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="text-dim">No managed users yet.</p>
+  {% endif %}
+</div>
+
+<div class="card transparent-card">
+  <h2>Next Step</h2>
+  <p class="text-dim helper-text">
+    This page only stores user access intent. Telegram commands for user config
+    delivery will use these groups later; no user-facing configs are sent from
+    this screen yet.
+  </p>
+</div>
+
+{% endblock %}

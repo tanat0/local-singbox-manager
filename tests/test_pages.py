@@ -62,6 +62,7 @@ def client():
         ("/logs", b"Service Logs"),
         ("/settings", b"Settings"),
         ("/profiles", b"Profiles"),
+        ("/users", b"Users"),
         ("/diagnostics", b"Diagnostics"),
         ("/backups", b"Backups"),
     ],
@@ -77,3 +78,27 @@ def test_health_and_version_probes(client):
     response = client.get("/version")
     assert response.status_code == 200
     assert response.json()["app"]
+
+
+def test_users_create_group_and_user(client):
+    group_resp = client.post("/users/groups", data={
+        "name": "family",
+        "description": "Family configs",
+        "node_tags": "node-a, node-b",
+        "notes": "limited access",
+        "enabled": "on",
+    }, follow_redirects=True)
+    assert group_resp.status_code == 200
+    assert b"Created group" in group_resp.content
+    assert b"family" in group_resp.content
+
+    user_resp = client.post("/users", data={
+        "telegram_id": "123456789",
+        "display_name": "Alex",
+        "config_group_id": "",
+        "notes": "test user",
+        "enabled": "on",
+    }, follow_redirects=True)
+    assert user_resp.status_code == 200
+    assert b"Created user" in user_resp.content
+    assert b"123456789" in user_resp.content
