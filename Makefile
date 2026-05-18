@@ -1,4 +1,4 @@
-.PHONY: install run test e2e
+.PHONY: install run test e2e telegram-check
 
 VENV := .venv
 PYTHON := $(VENV)/bin/python
@@ -20,3 +20,6 @@ test:
 
 e2e:
 	$(VENV)/bin/pytest tests/e2e --browser chromium -v
+
+telegram-check:
+	$(PYTHON) scripts/check-telegram.py

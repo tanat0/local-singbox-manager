@@ -394,6 +394,24 @@ TELEGRAM_BOT_TOKEN=123456:ABC...
 TELEGRAM_ADMIN_IDS=123456789,987654321
 ```
 
+Before restarting the service, verify the token and admin IDs:
+
+```bash
+make telegram-check
+```
+
+After sending `/start` to the bot, this can also show recent sender IDs:
+
+```bash
+.venv/bin/python scripts/check-telegram.py --list-updates
+```
+
+If `TELEGRAM_CHAT_ID` is set for notification delivery, send a test message:
+
+```bash
+.venv/bin/python scripts/check-telegram.py --send-test
+```
+
 Supported admin commands:
 
 ```text

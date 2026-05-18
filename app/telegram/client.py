@@ -18,6 +18,11 @@ class TelegramApiClient:
             raise RuntimeError(f"Telegram API {method} failed: {data}")
         return data
 
+    async def get_me(self) -> Dict[str, Any]:
+        data = await self._post("getMe", {})
+        result = data.get("result")
+        return dict(result) if isinstance(result, dict) else {}
+
     async def get_updates(self, offset: Optional[int], timeout: int, allowed_updates: List[str]) -> List[Dict[str, Any]]:
         payload: Dict[str, Any] = {"timeout": timeout, "allowed_updates": allowed_updates}
         if offset is not None:
