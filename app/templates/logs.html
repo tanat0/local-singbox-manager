@@ -2,10 +2,10 @@
 {% block title %}Logs — Sing-Box Manager{% endblock %}
 {% block content %}
 
-<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
-  <h1 style="margin:0">Service Logs</h1>
+<div class="page-header">
+  <h1>Service Logs</h1>
   <div class="actions">
-    <span class="text-dim" style="align-self:center;">Lines:</span>
+    <span class="text-dim">Lines:</span>
     <a href="/logs?lines=50"  class="btn btn-outline {% if lines == 50  %}btn-active{% endif %}">50</a>
     <a href="/logs?lines=100" class="btn btn-outline {% if lines == 100 %}btn-active{% endif %}">100</a>
     <a href="/logs?lines=200" class="btn btn-outline {% if lines == 200 %}btn-active{% endif %}">200</a>

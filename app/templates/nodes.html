@@ -22,9 +22,9 @@ hysteria2://password@host:port?sni=HOST#tag" required></textarea>
 </div>
 
 <div class="card">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-    <h2 style="margin:0">Nodes ({{ nodes | length }})</h2>
-    <div class="actions" style="margin:0">
+  <div class="card-header">
+    <h2>Nodes ({{ nodes | length }})</h2>
+    <div class="actions table-actions">
       <a href="/api/nodes/export" class="btn btn-outline">⬇ Export JSON</a>
     </div>
   </div>

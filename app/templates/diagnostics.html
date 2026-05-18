@@ -2,15 +2,15 @@
 {% block title %}Diagnostics — Sing-Box Manager{% endblock %}
 {% block content %}
 
-<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
-  <h1 style="margin:0">Diagnostics</h1>
+<div class="page-header">
+  <h1>Diagnostics</h1>
   {% if active_node %}
     {% set parsed = active_node.parsed_json | fromjson %}
     <span class="text-dim">Active: <strong>{{ active_node.tag }}</strong> — {{ parsed.server }}:{{ parsed.port }}</span>
   {% endif %}
 </div>
 
-<div class="card-grid" style="grid-template-columns:1fr 1fr">
+<div class="card-grid card-grid-2">
   <div class="card">
     <h2>System</h2>
     <div id="sysinfo" hx-get="/api/sysinfo" hx-trigger="load" hx-swap="innerHTML">
@@ -21,11 +21,11 @@
     <h2>Active Node</h2>
     {% if active_node %}
       {% set parsed = active_node.parsed_json | fromjson %}
-      <div style="font-size:13px;line-height:1.9" class="text-dim">
-        <div>Protocol: <strong style="color:var(--text)">{{ active_node.protocol }}</strong></div>
-        <div>Server: <strong style="color:var(--text)">{{ parsed.server }}:{{ parsed.port }}</strong></div>
-        {% if parsed.sni %}<div>SNI: <strong style="color:var(--text)">{{ parsed.sni }}</strong></div>{% endif %}
-        {% if parsed.security and parsed.security != 'none' %}<div>Security: <strong style="color:var(--text)">{{ parsed.security }}</strong></div>{% endif %}
+      <div class="text-dim compact-info">
+        <div>Protocol: <strong class="text-strong">{{ active_node.protocol }}</strong></div>
+        <div>Server: <strong class="text-strong">{{ parsed.server }}:{{ parsed.port }}</strong></div>
+        {% if parsed.sni %}<div>SNI: <strong class="text-strong">{{ parsed.sni }}</strong></div>{% endif %}
+        {% if parsed.security and parsed.security != 'none' %}<div>Security: <strong class="text-strong">{{ parsed.security }}</strong></div>{% endif %}
       </div>
     {% else %}
       <p class="text-dim">No active node. <a href="/nodes">Add one →</a></p>
@@ -34,8 +34,8 @@
 </div>
 
 <div class="card">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-    <h2 style="margin:0">Tunnel Health</h2>
+  <div class="card-header">
+    <h2>Tunnel Health</h2>
     <button class="btn btn-primary btn-sm"
             hx-get="/api/health"
             hx-target="#health-results"
@@ -50,15 +50,15 @@
        hx-swap="innerHTML">
     <span class="text-dim">Running checks…</span>
   </div>
-  <p class="text-dim" style="margin-top:10px;font-size:12px">
+  <p class="text-dim mt-md">
     Connectivity checks run through the active TUN — passing confirms end-to-end VPN connectivity.
   </p>
 </div>
 
 <div class="card">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:8px">
-    <h2 style="margin:0">Latency History</h2>
-    <div style="display:flex;gap:8px;align-items:center">
+  <div class="card-header">
+    <h2>Latency History</h2>
+    <div class="toolbar">
       <select id="hours-select" class="select-sm" onchange="loadCharts()">
         <option value="6">Last 6 h</option>
         <option value="24" selected>Last 24 h</option>
@@ -67,7 +67,7 @@
       </select>
     </div>
   </div>
-  <p class="text-dim" style="margin-bottom:14px;font-size:12px">
+  <p class="text-dim section-note">
     Sampled every 5 min by background task. Data accumulates after first startup.
   </p>
   <div id="charts-area">
@@ -83,7 +83,7 @@
        hx-swap="innerHTML">
     <span class="text-dim">Loading…</span>
   </div>
-  <div style="margin-top:10px">
+  <div class="toolbar toolbar-tight">
     <button class="btn btn-outline"
             hx-get="/api/diff"
             hx-target="#diff-display"

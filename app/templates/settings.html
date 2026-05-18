@@ -44,21 +44,21 @@
 
     <button type="submit" class="btn btn-primary">Save Settings</button>
   </form>
-  <p class="text-dim" style="margin-top:14px">
+  <p class="text-dim mt-lg">
     Settings apply on next node activation. Currently active node is not redeployed automatically.
   </p>
 </div>
 
 <div class="card">
   <h2>Notifications</h2>
-  <p class="text-dim" style="font-size:13px;margin-bottom:14px">
+  <p class="text-dim section-note">
     Events: deploy success/fail, rollback, tunnel degraded/recovered.
   </p>
 
-  <table style="width:100%;font-size:13px">
+  <table class="settings-table">
     <tbody>
       <tr>
-        <td style="padding:6px 0;width:120px"><strong>notify-send</strong></td>
+        <td class="settings-key"><strong>notify-send</strong></td>
         <td>
           {% if notify_channels.notify_send %}
             <span class="badge badge-green">available</span>
@@ -69,7 +69,7 @@
         <td class="text-dim">Desktop popups — no config needed</td>
       </tr>
       <tr>
-        <td style="padding:6px 0"><strong>Telegram</strong></td>
+        <td class="settings-key-narrow"><strong>Telegram</strong></td>
         <td>
           {% if notify_channels.telegram %}
             <span class="badge badge-green">active</span>
@@ -86,7 +86,7 @@
         </td>
       </tr>
       <tr>
-        <td style="padding:6px 0"><strong>ntfy.sh</strong></td>
+        <td class="settings-key-narrow"><strong>ntfy.sh</strong></td>
         <td>
           {% if notify_channels.ntfy %}
             <span class="badge badge-green">active</span>
@@ -105,7 +105,7 @@
     </tbody>
   </table>
 
-  <div style="margin-top:14px">
+  <div class="mt-lg">
     <form method="post" action="/settings/notify-test">
       <button type="submit" class="btn btn-outline">Send Test Notification</button>
     </form>

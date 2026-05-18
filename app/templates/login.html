@@ -7,20 +7,20 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px">
-  <div style="width:100%;max-width:360px">
+<div class="center-shell">
+  <div class="login-box">
 
-    <div style="text-align:center;margin-bottom:28px">
-      <div style="font-size:28px;margin-bottom:8px">⬡</div>
-      <div class="nav-brand" style="font-size:20px;display:block;margin-bottom:4px">Sing-Box Manager</div>
-      <div class="text-dim" style="font-size:12px">v{{ app_version }}</div>
+    <div class="login-brand">
+      <div class="login-mark">⬡</div>
+      <div class="nav-brand login-title">Sing-Box Manager</div>
+      <div class="text-dim">v{{ app_version }}</div>
     </div>
 
     <div class="card">
-      <h2 style="margin-bottom:18px">Sign in</h2>
+      <h2 class="block-gap">Sign in</h2>
 
       {% if error %}
-      <div class="alert alert-error" style="margin-bottom:16px">{{ error }}</div>
+      <div class="alert alert-error">{{ error }}</div>
       {% endif %}
 
       <form method="post" action="/login">
@@ -30,7 +30,7 @@
           <input type="password" name="password" autofocus autocomplete="current-password"
                  placeholder="Enter admin password" required>
         </div>
-        <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;padding:9px">
+        <button type="submit" class="btn btn-primary full-width">
           Sign in
         </button>
       </form>

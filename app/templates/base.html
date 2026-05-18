@@ -48,7 +48,7 @@
         <option value="light">Light</option>
       </select>
       {% if auth_enabled %}
-      <form method="post" action="/logout" style="margin:0">
+      <form method="post" action="/logout" class="form-group-tight">
         <button class="btn btn-outline btn-sm">Logout</button>
       </form>
       {% endif %}
@@ -65,7 +65,7 @@
           hx-get="/api/sysinfo"
           hx-trigger="load"
           hx-swap="innerHTML"
-          style="margin-left:10px"></span>
+          class="footer-meta"></span>
   </footer>
 
   <script>

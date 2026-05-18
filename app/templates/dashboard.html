@@ -12,7 +12,7 @@
 
   <div class="card">
     <h2>Service</h2>
-    <div style="margin-bottom:12px">
+    <div class="block-gap">
       {% if status.active_state == "active" %}
         <span class="badge badge-green">{{ status.active_state }}/{{ status.sub_state }}</span>
       {% elif status.active_state in ["inactive","failed","error"] %}
@@ -24,7 +24,7 @@
         <span class="text-dim">PID {{ status.pid }}</span>
       {% endif %}
     </div>
-    {% if status.since %}<div class="text-dim" style="margin-bottom:10px">Since {{ status.since }}</div>{% endif %}
+    {% if status.since %}<div class="text-dim mt-md">Since {{ status.since }}</div>{% endif %}
     <div class="actions">
       <form method="post" action="/service/restart"><button class="btn btn-primary">Restart</button></form>
       <form method="post" action="/service/start"><button class="btn btn-success">Start</button></form>
@@ -37,19 +37,19 @@
     <h2>Active Node</h2>
     {% if active_node %}
       {% set parsed = active_node.parsed_json | fromjson %}
-      <div style="margin-bottom:6px">
+      <div class="block-gap-sm">
         <span class="badge badge-blue">{{ active_node.protocol }}</span>
         <strong>{{ active_node.tag }}</strong>
       </div>
       <div class="text-dim">{{ parsed.server }}:{{ parsed.port }}</div>
       {% if active_profile %}
-        <div class="text-dim" style="margin-top:6px;font-size:12px">
-          Profile: <strong style="color:var(--text)">{{ active_profile.name }}</strong>
+        <div class="text-dim mt-sm">
+          Profile: <strong class="text-strong">{{ active_profile.name }}</strong>
           &nbsp;·&nbsp;{{ active_profile.dns_preset }}&nbsp;·&nbsp;{{ active_profile.route_preset }}
         </div>
       {% endif %}
     {% else %}
-      <div class="text-dim" style="margin-bottom:12px">No active node.</div>
+      <div class="text-dim block-gap">No active node.</div>
       <a href="/nodes" class="btn btn-outline">Add Node →</a>
     {% endif %}
   </div>
@@ -59,7 +59,7 @@
     <div id="ip-display" hx-get="/api/ip" hx-trigger="load" hx-swap="innerHTML">
       <span class="text-dim">Checking…</span>
     </div>
-    <div style="margin-top:10px">
+    <div class="toolbar toolbar-tight">
       <button class="btn btn-outline"
               hx-get="/api/ip" hx-target="#ip-display" hx-swap="innerHTML">↻ Recheck</button>
       <a href="/diagnostics" class="btn btn-outline">Full Diagnostics →</a>
@@ -69,8 +69,8 @@
 </div>
 
 <div class="card">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px;flex-wrap:wrap">
-    <h2 style="margin:0">Quick Switch</h2>
+  <div class="card-header">
+    <h2>Quick Switch</h2>
     <a href="/nodes" class="btn btn-outline btn-sm">Manage Nodes</a>
   </div>
   {% if nodes %}
@@ -128,7 +128,7 @@
   <div id="diff-display" hx-get="/api/diff" hx-trigger="load" hx-swap="innerHTML">
     <span class="text-dim">Loading…</span>
   </div>
-  <div style="margin-top:10px">
+  <div class="toolbar toolbar-tight">
     <button class="btn btn-outline"
             hx-get="/api/diff" hx-target="#diff-display" hx-swap="innerHTML">↻ Refresh</button>
   </div>
@@ -139,7 +139,7 @@
   <div id="log-snippet" hx-get="/api/logs?lines=300&mode=problems" hx-trigger="load" hx-swap="innerHTML">
     <span class="text-dim">Loading…</span>
   </div>
-  <div style="margin-top:10px;display:flex;gap:8px">
+  <div class="toolbar toolbar-tight">
     <button class="btn btn-outline"
             hx-get="/api/logs?lines=300&mode=problems" hx-target="#log-snippet" hx-swap="innerHTML">↻ Refresh</button>
     <a href="/logs" class="btn btn-outline">Full Logs →</a>

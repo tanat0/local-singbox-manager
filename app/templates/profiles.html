@@ -11,18 +11,18 @@
 <div class="card">
   <h2>Create Profile</h2>
   <form method="post" action="/profiles">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-      <div class="form-group" style="margin:0">
-        <label>Name <span style="color:var(--danger)">*</span></label>
+    <div class="split-grid">
+      <div class="form-group form-group-tight">
+        <label>Name <span class="required-marker">*</span></label>
         <input type="text" name="name" required placeholder="work / gaming / bypass-ru">
       </div>
-      <div class="form-group" style="margin:0">
+      <div class="form-group form-group-tight">
         <label>Description</label>
         <input type="text" name="description" placeholder="Optional note">
       </div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:14px">
-      <div class="form-group" style="margin:0">
+    <div class="triple-grid">
+      <div class="form-group form-group-tight">
         <label>Node</label>
         <select name="node_tag">
           <option value="">— no node —</option>
@@ -31,7 +31,7 @@
           {% endfor %}
         </select>
       </div>
-      <div class="form-group" style="margin:0">
+      <div class="form-group form-group-tight">
         <label>DNS Preset</label>
         <select name="dns_preset">
           {% for key, preset in dns_presets.items() %}
@@ -39,7 +39,7 @@
           {% endfor %}
         </select>
       </div>
-      <div class="form-group" style="margin:0">
+      <div class="form-group form-group-tight">
         <label>Route Preset</label>
         <select name="route_preset">
           {% for key, preset in route_presets.items() %}
@@ -48,7 +48,7 @@
         </select>
       </div>
     </div>
-    <div style="margin-top:14px">
+    <div class="mt-lg">
       <button type="submit" class="btn btn-primary">Create Profile</button>
     </div>
   </form>
@@ -74,14 +74,14 @@
         <td>
           <strong>{{ profile.name }}</strong>
           {% if profile.description %}
-            <div class="text-dim" style="font-size:11px;margin-top:2px">{{ profile.description }}</div>
+            <div class="text-dim mt-sm">{{ profile.description }}</div>
           {% endif %}
         </td>
         <td class="text-dim">
           {% if profile.node_tag %}
             <code>{{ profile.node_tag }}</code>
           {% else %}
-            <span style="color:var(--warning)">— none —</span>
+            <span class="text-warning">— none —</span>
           {% endif %}
         </td>
         <td class="text-dim">{{ dns_presets[profile.dns_preset].label if profile.dns_preset in dns_presets else profile.dns_preset }}</td>
@@ -115,9 +115,9 @@
   {% endif %}
 </div>
 
-<div class="card" style="background:transparent;border-style:dashed">
+<div class="card transparent-card">
   <h2>How profiles work</h2>
-  <p class="text-dim" style="font-size:13px;line-height:1.8">
+  <p class="text-dim helper-text">
     A profile bundles a <strong>node + DNS preset + route preset</strong> into one click.<br>
     Activating a profile deploys that config through the full pipeline (validate → deploy → restart → health check).<br>
     Settings and the active node update atomically — no separate steps needed.<br>
