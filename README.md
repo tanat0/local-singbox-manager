@@ -1,6 +1,11 @@
 # Sing-Box Manager
 
-Local web UI for managing [sing-box](https://sing-box.sagernet.org/) on Manjaro/Arch Linux.
+[![Tests](https://github.com/tanat0/local-singbox-manager/actions/workflows/tests.yml/badge.svg)](https://github.com/tanat0/local-singbox-manager/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://www.python.org/)
+
+Localhost-only web UI for managing [sing-box](https://sing-box.sagernet.org/)
+client configs, deploys, logs, and profiles on Linux.
 
 - Paste a proxy URL → parse → validate → deploy with auto-rollback
 - **Profiles** — bundle node + DNS + route into one-click activate
@@ -18,7 +23,7 @@ Local web UI for managing [sing-box](https://sing-box.sagernet.org/) on Manjaro/
 
 **Supported protocols:** `vless://` (Reality / TLS), `hysteria2://`, `hy2://`
 
-**Current version:** 1.2.0 · See [CHANGELOG.md](CHANGELOG.md) for history.
+**Current version:** 1.3.0 · See [CHANGELOG.md](CHANGELOG.md) for history.
 
 ---
 
@@ -30,9 +35,15 @@ Browser (localhost only)
         ▼
 FastAPI app  127.0.0.1:9090
   │
+  ├─ main.py          app bootstrap, migrations, background tasks
   ├─ auth.py          HMAC-SHA256 signed session cookie, rate limiting, CSRF
+  ├─ config.py        typed environment settings
   ├─ notify.py        fire-and-forget notifications (notify-send / Telegram / ntfy)
-  ├─ telegram_admin.py optional admin bot over Telegram long polling
+  ├─ repositories.py  database access boundaries
+  ├─ system_clients.py subprocess/systemd boundary
+  ├─ routes/          FastAPI route handlers
+  ├─ services/        deploy, nodes, profiles, users, metrics, dashboard logic
+  ├─ telegram/        optional admin/user bot over Telegram long polling
   ├─ version.py       VERSION constant
   │
   ├─ parsers/         URL → Pydantic model (VlessNode, Hysteria2Node)
@@ -48,12 +59,12 @@ FastAPI app  127.0.0.1:9090
   │
   ├─ health.py        async service + TUN + DNS + TCP + HTTPS checks,
   │                   external IP via fallback chain; runs every 5 min
-  ├─ routes/users.py  config groups + managed users for future config delivery
   │
   ├─ logging_config.py  structured logging (INFO for operations,
   │                     WARNING for degraded/failed conditions, no DEBUG spam)
   │
-  └─ models.py        Node, Settings, DeployLog, HealthCheckLog, Profile
+  └─ models.py        Node, Settings, DeployLog, HealthCheckLog, Profile,
+                      AdminActionLog, ConfigGroup, ManagedUser, ConfigDeliveryLog
                       (SQLite via SQLAlchemy; schema managed by Alembic,
                        auto-migrated on startup)
 
@@ -76,7 +87,7 @@ FastAPI → sudo helper (privileged boundary)
 
 - sing-box ≥ 1.13 at `/usr/bin/sing-box`, running as `sing-box.service`
 - Python 3.8+ supported, 3.11 recommended (tested on 3.8.18 and 3.11)
-- A user account that will run the web app (default: `nikita` — change in sudoers if different)
+- A normal Linux user account that will run the web app
 
 ---
 
@@ -85,7 +96,8 @@ FastAPI → sudo helper (privileged boundary)
 ### 1. Clone and enter the directory
 
 ```bash
-cd ~/path/to/local-singbox-manager
+git clone https://github.com/tanat0/local-singbox-manager.git
+cd local-singbox-manager
 ```
 
 ### 2. Create virtualenv and install dependencies
@@ -113,14 +125,16 @@ sudo chown root:root /usr/local/bin/singbox-manager-helper
 
 ### 4. Configure sudoers
 
+The tracked sudoers file is a template. For a normal install, use the systemd
+installer below; it renders the current username automatically. For manual
+installs, render the template first and validate it before use:
+
 ```bash
-sudo cp sudoers.d/singbox-manager /etc/sudoers.d/singbox-manager
-sudo chmod 440 /etc/sudoers.d/singbox-manager
-sudo visudo -c        # must print "parsed OK" — do not skip this check
+bash scripts/install-systemd.sh --dry-run
 ```
 
-The rule allows your user to run the helper without a password prompt.
-Edit `/etc/sudoers.d/singbox-manager` if your username is not `nikita`.
+The installed rule allows the selected user to run only the helper without a
+password prompt.
 
 ### 5. Ensure sing-box config directory and backup directory exist
 
@@ -177,30 +191,29 @@ The app runs Alembic migrations automatically on startup — the SQLite database
 
 ## Run as a systemd service
 
+Preview the rendered systemd and sudoers files:
+
+```bash
+bash scripts/install-systemd.sh --dry-run
+```
+
 One-shot install from a normal terminal:
 
 ```bash
 bash scripts/install-systemd.sh
 ```
 
-Manual equivalent:
+Useful options:
 
 ```bash
-# Review WorkingDirectory, ExecStart, and EnvironmentFile lines in the unit file first
-make install
-sudo install -o root -g root -m 755 scripts/singbox-manager-helper /usr/local/bin/singbox-manager-helper
-sudo install -o root -g root -m 440 sudoers.d/singbox-manager /etc/sudoers.d/singbox-manager
-sudo visudo -c
-sudo mkdir -p /etc/sing-box/backups
-sudo cp singbox-manager.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now singbox-manager.service
-sudo systemctl status singbox-manager.service
+bash scripts/install-systemd.sh --user "$USER" --port 9090
+bash scripts/install-systemd.sh --helper-bin /usr/local/bin/singbox-manager-helper
 ```
 
-The service reads environment variables from the project `.env` file via
-`EnvironmentFile=-/home/nikita/Documents/projects/own/local-singbox-manager/.env`.
-After changing `.env`, restart the service:
+The installer renders `singbox-manager.service` and `sudoers.d/singbox-manager`
+from templates using the current checkout path and target user. The installed
+service reads environment variables from `<project>/.env`. After changing
+`.env`, restart the service:
 
 ```bash
 sudo systemctl restart singbox-manager.service
@@ -523,7 +536,7 @@ sqlite3 singbox_manager.db \
 make test
 ```
 
-**207 tests** covering:
+The non-e2e suite covers:
 
 | File | Coverage |
 |------|----------|
@@ -538,6 +551,9 @@ make test
 | `test_auth.py` | Token roundtrip/expiry, rate limiting, CSRF, HTTP middleware |
 | `test_profiles.py` | Profile CRUD, activate/deactivate, state transitions |
 | `test_notify.py` | All channels, priority mapping, error resilience, fire() scheduling |
+| `test_telegram_admin.py` | Telegram dispatcher, admin/user handlers, chunking |
+| `test_system_clients.py` | subprocess/systemd command boundary |
+| `test_pages.py` | major page render smoke tests |
 
 ### E2e tests (Playwright, no root required)
 
@@ -545,7 +561,7 @@ make test
 make e2e
 ```
 
-**50 tests** — starts a real uvicorn server on port 19090 with an isolated temp
+The e2e suite starts a real uvicorn server on port 19090 with an isolated temp
 DB and all system/helper calls mocked. No sing-box binary, no sudo required.
 
 | Area | Tests |
@@ -567,14 +583,20 @@ DB and all system/helper calls mocked. No sing-box binary, no sudo required.
 
 ```
 app/
-  main.py              FastAPI routes + lifespan + background health task
+  main.py              app bootstrap, migrations, background tasks
+  config.py            typed environment settings
   auth.py              Auth middleware, session tokens, rate limiting, CSRF
   notify.py            Fire-and-forget notifications (notify-send/Telegram/ntfy)
-  version.py           VERSION constant
   db.py                SQLite engine, session, Base
-  models.py            Node, Settings, DeployLog, HealthCheckLog, Profile
+  models.py            SQLAlchemy models
+  repositories.py      database access boundaries
+  system_clients.py    subprocess/systemd command boundary
+  version.py           VERSION constant
   health.py            async service/TUN/DNS/TCP/HTTPS checks, external IP
   logging_config.py    setup_logging(), get_logger() — structured, no spam
+  routes/              FastAPI route handlers
+  services/            business logic for deploys, nodes, profiles, users
+  telegram/            Telegram bot client, dispatcher, handlers, presenters
   parsers/
     base.py            ParsedNode (Pydantic base model)
     registry.py        @register decorator, parse_url() dispatcher
@@ -597,27 +619,19 @@ migrations/            Alembic migrations
 
 scripts/
   singbox-manager-helper   Privileged helper (install to /usr/local/bin/)
+  install-systemd.sh       Renders and installs systemd/sudoers templates
+  check-telegram.py        Telegram env/connectivity diagnostics
 
 sudoers.d/
-  singbox-manager          Sudoers rule (install to /etc/sudoers.d/)
+  singbox-manager          Sudoers template
 
-singbox-manager.service    systemd unit for the web app
+singbox-manager.service    systemd unit template for the web app
 
 tests/
-  test_parse_vless.py
-  test_parse_hysteria2.py
-  test_generate_config.py
-  test_health.py
-  test_metrics.py
-  test_deployer.py
-  test_validator.py
-  test_registry.py
-  test_auth.py
-  test_profiles.py
-  test_notify.py
+  test_*.py
   e2e/
     conftest.py            Uvicorn server fixture + all system mocks
-    test_smoke.py          50 Playwright e2e tests
+    test_smoke.py          Playwright e2e tests
 ```
 
 ---
@@ -646,6 +660,12 @@ tests/
   This is a local pet-project tool — encryption at rest is out of scope.
 - Notification channels (Telegram token, ntfy topic) are stored in env vars —
   protect your environment from other local users.
+
+---
+
+## License
+
+MIT. See [LICENSE](LICENSE).
 
 ---
 

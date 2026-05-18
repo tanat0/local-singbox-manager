@@ -5,6 +5,33 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [1.3.0] — 2026-05-18
+
+### Added
+- Node metadata and one-shot country lookup, including provider labels and notes.
+- Dashboard quick switch, recent-problems log view, and log filters.
+- Light / dark / system theme switcher.
+- Telegram admin bot commands for status, node listing, activation, logs,
+  health checks, and test notifications.
+- User config distribution groundwork: config groups, managed Telegram users,
+  `/config`, `/refresh`, `/status`, and delivery audit logs.
+- Telegram diagnostics helper: `make telegram-check`.
+- GitHub Actions non-e2e test workflow and MIT license.
+
+### Changed
+- Deploy pipeline now restarts sing-box for TUN configs, waits with retry/backoff,
+  and reports filtered failure details.
+- Generated sing-box configs default to `log.level: warn`.
+- Application structure split into routes, services, repositories, typed config,
+  system clients, and a Telegram package.
+- systemd/sudoers install flow now renders user/path-specific files from templates.
+
+### Fixed
+- Hysteria2 percent-encoded passwords are decoded correctly.
+- Deploy health failures no longer hide the relevant sing-box fatal/error line.
+
+---
+
 ## [1.2.0] — 2026-05-13
 
 ### Added

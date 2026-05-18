@@ -4,13 +4,13 @@ After=network.target
 
 [Service]
 Type=simple
-User=nikita
-WorkingDirectory=/home/nikita/Documents/projects/own/local-singbox-manager
-EnvironmentFile=-/home/nikita/Documents/projects/own/local-singbox-manager/.env
-ExecStart=/home/nikita/Documents/projects/own/local-singbox-manager/.venv/bin/uvicorn \
+User=__SBM_USER__
+WorkingDirectory=__SBM_PROJECT_DIR__
+EnvironmentFile=-__SBM_PROJECT_DIR__/.env
+ExecStart=__SBM_PROJECT_DIR__/.venv/bin/uvicorn \
     app.main:app \
     --host 127.0.0.1 \
-    --port 9090 \
+    --port __SBM_PORT__ \
     --log-level info
 Restart=on-failure
 RestartSec=5

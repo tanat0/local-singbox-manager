@@ -1,11 +1,8 @@
 # /etc/sudoers.d/singbox-manager
 #
-# Allows the sing-box manager web app (running as nikita) to call
+# Allows the sing-box manager web app (running as __SBM_USER__) to call
 # the privileged helper without a password prompt.
 #
-# Install:
-#   sudo cp sudoers.d/singbox-manager /etc/sudoers.d/singbox-manager
-#   sudo chmod 440 /etc/sudoers.d/singbox-manager
-#   sudo visudo -c   # validate syntax before using
+# This template is rendered by scripts/install-systemd.sh.
 
-nikita ALL=(root) NOPASSWD: /usr/local/bin/singbox-manager-helper
+__SBM_USER__ ALL=(root) NOPASSWD: __SBM_HELPER_BIN__
