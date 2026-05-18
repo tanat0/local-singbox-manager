@@ -39,6 +39,7 @@ def test_channels_status_telegram_enabled():
          patch.object(notify, "TELEGRAM_CHAT_ID", "99999"):
         s = notify.channels_status()
     assert s["telegram"] is True
+    assert s["telegram_chat_id"] == "99999"
 
 
 def test_channels_status_ntfy_disabled_by_default():

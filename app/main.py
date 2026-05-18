@@ -19,6 +19,7 @@ from app.health import run_health_checks
 from app.logging_config import get_logger, setup_logging
 from app.models import HealthCheckLog
 from app.routes import dashboard, logs, nodes, profiles, settings, system
+from app.telegram_admin import create_bot_from_env
 from app.version import VERSION
 from app.web import BASE_DIR
 
@@ -84,13 +85,20 @@ async def lifespan(app: FastAPI):
     _log.info("Sing-Box Manager v%s starting up", VERSION)
     emit_startup_warnings()
     _run_migrations()
-    task = asyncio.create_task(_health_check_loop())
+    health_task = asyncio.create_task(_health_check_loop())
+    telegram_bot = create_bot_from_env()
+    telegram_task = asyncio.create_task(telegram_bot.run_forever()) if telegram_bot else None
     yield
-    task.cancel()
-    try:
-        await task
-    except asyncio.CancelledError:
-        pass
+    tasks = [health_task]
+    if telegram_task:
+        tasks.append(telegram_task)
+    for task in tasks:
+        task.cancel()
+    for task in tasks:
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(title="Sing-Box Manager", docs_url=None, redoc_url=None, lifespan=lifespan)

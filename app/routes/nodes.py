@@ -12,13 +12,11 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import DeployLog, Node, Profile
+from app.models import Node
 from app.parsers import parse_url
 from app.routes.common import redirect
-from app.services.nodes import deserialize_node, latest_deploy_logs, refresh_node_geo as refresh_geo
-from app.services.settings import presets, singbox_log_level
-from app.singbox.deployer import deploy_with_rollback
-from app.singbox.generator import generate_config
+from app.services.deploy import activate_node as activate_node_service
+from app.services.nodes import latest_deploy_logs, refresh_node_geo as refresh_geo
 from app.web import templates
 
 router = APIRouter()
@@ -115,42 +113,8 @@ async def activate_node(node_id: int, db: Session = Depends(get_db)):
     node = db.query(Node).filter(Node.id == node_id).first()
     if not node:
         return redirect("/nodes", msg="Node not found", msg_type="error")
-    try:
-        parsed = deserialize_node(node)
-    except Exception as e:
-        return redirect("/nodes", msg=f"Failed to load node: {e}", msg_type="error")
-    try:
-        dns_p, route_p = presets(db)
-        config = generate_config(
-            parsed,
-            dns_preset=dns_p,
-            route_preset=route_p,
-            log_level=singbox_log_level(db),
-        )
-    except Exception as e:
-        return redirect("/nodes", msg=f"Config generation failed: {e}", msg_type="error")
-
-    result = await deploy_with_rollback(config, node.tag, health_check=True)
-
-    db.add(DeployLog(
-        node_tag=result.node_tag or node.tag,
-        config_hash=result.config_hash,
-        backup_name=result.backup_name,
-        stage_reached=result.stage,
-        success=result.success,
-        rolled_back=result.rolled_back,
-        error=result.error or None,
-    ))
-
-    if not result.success:
-        db.commit()
-        return redirect("/nodes", msg=result.user_message(), msg_type="error")
-
-    db.query(Node).update({"active": False})
-    node.active = True
-    db.query(Profile).update({"active": False})
-    db.commit()
-    return redirect("/", msg=result.user_message(), msg_type="success")
+    result = await activate_node_service(db, node)
+    return redirect("/" if result.ok else "/nodes", msg=result.message, msg_type="success" if result.ok else "error")
 
 
 @router.get("/api/nodes/export")

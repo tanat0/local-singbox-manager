@@ -69,3 +69,15 @@ class DeployLog(Base):
     success = Column(Boolean, nullable=False)
     rolled_back = Column(Boolean, default=False, nullable=False)
     error = Column(Text, nullable=True)
+
+
+class AdminActionLog(Base):
+    __tablename__ = "admin_action_log"
+
+    id = Column(Integer, primary_key=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    actor = Column(String, nullable=False)
+    channel = Column(String, nullable=False)
+    action = Column(String, nullable=False)
+    success = Column(Boolean, nullable=False)
+    detail = Column(Text, nullable=True)

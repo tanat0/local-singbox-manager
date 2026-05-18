@@ -79,7 +79,7 @@
         </td>
         <td class="text-dim">
           {% if notify_channels.telegram %}
-            Sending to chat {{ notify_channels.ntfy_topic }}
+            Sending to chat {{ notify_channels.telegram_chat_id }}
           {% else %}
             Set <code>TELEGRAM_BOT_TOKEN</code> + <code>TELEGRAM_CHAT_ID</code> env vars to enable
           {% endif %}

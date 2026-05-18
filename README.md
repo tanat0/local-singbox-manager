@@ -31,6 +31,7 @@ FastAPI app  127.0.0.1:9090
   │
   ├─ auth.py          HMAC-SHA256 signed session cookie, rate limiting, CSRF
   ├─ notify.py        fire-and-forget notifications (notify-send / Telegram / ntfy)
+  ├─ telegram_admin.py optional admin bot over Telegram long polling
   ├─ version.py       VERSION constant
   │
   ├─ parsers/         URL → Pydantic model (VlessNode, Hysteria2Node)
@@ -141,6 +142,11 @@ SESSION_SECRET=64-char-hex-string   # openssl rand -hex 32
 # Notifications (all optional — leave unset to disable a channel)
 TELEGRAM_BOT_TOKEN=123456:ABC...
 TELEGRAM_CHAT_ID=your-chat-id
+
+# Telegram admin bot (optional) — comma-separated numeric Telegram user IDs
+TELEGRAM_ADMIN_IDS=123456789
+TELEGRAM_ADMIN_BOT_ENABLED=1
+
 NTFY_TOPIC=singbox-alerts           # uses ntfy.sh by default
 NTFY_SERVER=https://ntfy.myserver.com   # for self-hosted ntfy (optional)
 
@@ -375,6 +381,32 @@ channel never blocks the request path.
 | `notify-send` | None — always attempted (best effort) | Requires a desktop session with DBUS; silently skipped if unavailable or running headless |
 | Telegram | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | Messages sent with `parse_mode=HTML` |
 | ntfy.sh | `NTFY_TOPIC` (+ `NTFY_SERVER` for self-hosted) | Priority: default / high / urgent |
+
+### Telegram Admin Bot
+
+The admin bot is optional and uses Telegram long polling from the same
+`singbox-manager.service` process. It starts only when both are set:
+
+```bash
+TELEGRAM_BOT_TOKEN=123456:ABC...
+TELEGRAM_ADMIN_IDS=123456789,987654321
+```
+
+Supported admin commands:
+
+```text
+/status
+/nodes
+/activate <node-id-or-tag>
+/logs
+/health
+/notify_test
+```
+
+Only IDs listed in `TELEGRAM_ADMIN_IDS` are allowed. Denied and accepted admin
+actions are written to `admin_action_log`. The bot reuses the same deploy
+pipeline as the web UI: validation, restart, health check, rollback, deploy log,
+and notifications.
 
 **Events:**
 

@@ -10,13 +10,11 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import DeployLog, Node, Profile
+from app.models import Node, Profile
 from app.routes.common import redirect
-from app.services.nodes import deserialize_node
-from app.services.settings import presets, set_setting, singbox_log_level
-from app.singbox.deployer import deploy_with_rollback
+from app.services.deploy import activate_node as activate_node_service
+from app.services.settings import presets, set_setting
 from app.singbox.dns import DNS_PRESETS
-from app.singbox.generator import generate_config
 from app.singbox.routes import ROUTE_PRESETS
 from app.web import templates
 
@@ -91,40 +89,9 @@ async def activate_profile(profile_id: int, db: Session = Depends(get_db)):
             msg_type="error",
         )
 
-    try:
-        parsed = deserialize_node(node)
-    except Exception as e:
-        return redirect("/profiles", msg=f"Failed to load node: {e}", msg_type="error")
-    try:
-        config = generate_config(
-            parsed,
-            dns_preset=profile.dns_preset,
-            route_preset=profile.route_preset,
-            log_level=singbox_log_level(db),
-        )
-    except Exception as e:
-        return redirect("/profiles", msg=f"Config generation failed: {e}", msg_type="error")
-
-    result = await deploy_with_rollback(config, node.tag, health_check=True)
-
-    db.add(DeployLog(
-        node_tag=result.node_tag or node.tag,
-        config_hash=result.config_hash,
-        backup_name=result.backup_name,
-        stage_reached=result.stage,
-        success=result.success,
-        rolled_back=result.rolled_back,
-        error=result.error or None,
-    ))
-
-    if not result.success:
-        db.commit()
-        return redirect("/profiles", msg=result.user_message(), msg_type="error")
-
-    db.query(Node).update({"active": False})
-    node.active = True
-    db.query(Profile).update({"active": False})
-    profile.active = True
+    result = await activate_node_service(db, node, profile=profile)
+    if not result.ok:
+        return redirect("/profiles", msg=result.message, msg_type="error")
     set_setting(db, "dns_preset", profile.dns_preset)
     set_setting(db, "route_preset", profile.route_preset)
     db.commit()

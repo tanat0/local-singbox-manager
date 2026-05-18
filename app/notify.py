@@ -134,6 +134,7 @@ def channels_status() -> Dict[str, object]:
     return {
         "notify_send": shutil.which("notify-send") is not None,
         "telegram": bool(TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID),
+        "telegram_chat_id": TELEGRAM_CHAT_ID if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID else "",
         "ntfy": bool(NTFY_TOPIC),
         "ntfy_server": NTFY_SERVER if NTFY_TOPIC else "",
         "ntfy_topic": NTFY_TOPIC,
