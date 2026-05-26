@@ -46,6 +46,8 @@ hysteria2://password@host:port?sni=HOST#tag" required></textarea>
           <span class="badge badge-blue">{{ node.protocol }}</span>
           {% if node.active %}
             <span class="badge badge-green">active</span>
+          {% else %}
+            <span class="badge badge-gray">inactive</span>
           {% endif %}
           <div class="text-dim">{{ parsed.server }}:{{ parsed.port }}</div>
         </td>

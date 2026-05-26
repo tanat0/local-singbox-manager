@@ -7,6 +7,8 @@ def test_load_settings_uses_safe_defaults():
     settings = load_settings({})
 
     assert settings.database_url == "sqlite:///./singbox_manager.db"
+    assert settings.migrations_enabled is True
+    assert settings.background_tasks_enabled is True
     assert settings.health_check_interval == 300
     assert settings.system_paths.singbox_bin == "/usr/bin/sing-box"
     assert settings.system_paths.helper_bin == "/usr/local/bin/singbox-manager-helper"
@@ -16,6 +18,8 @@ def test_load_settings_uses_safe_defaults():
 def test_load_settings_preserves_existing_env_names():
     settings = load_settings({
         "DATABASE_URL": "sqlite:////tmp/app.db",
+        "MIGRATIONS_ENABLED": "0",
+        "BACKGROUND_TASKS_ENABLED": "0",
         "HEALTH_CHECK_INTERVAL": "15",
         "SINGBOX_BIN": "/opt/sing-box",
         "HELPER_BIN": "/opt/helper",
@@ -30,6 +34,8 @@ def test_load_settings_preserves_existing_env_names():
     })
 
     assert settings.database_url == "sqlite:////tmp/app.db"
+    assert settings.migrations_enabled is False
+    assert settings.background_tasks_enabled is False
     assert settings.health_check_interval == 15
     assert settings.system_paths.singbox_bin == "/opt/sing-box"
     assert settings.system_paths.helper_bin == "/opt/helper"

@@ -92,8 +92,11 @@ class ConfigGroup(Base):
     enabled = Column(Boolean, default=True, nullable=False)
     # JSON array of node tags. Empty means the group exists but has no configs assigned yet.
     node_tags_json = Column(Text, nullable=False, default="[]")
+    config_version = Column(Integer, default=1, nullable=False)
+    refresh_limit_per_hour = Column(Integer, nullable=True)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 
 class ManagedUser(Base):
@@ -104,6 +107,7 @@ class ManagedUser(Base):
     display_name = Column(String, nullable=True)
     enabled = Column(Boolean, default=True, nullable=False)
     config_group_id = Column(Integer, ForeignKey("config_groups.id"), nullable=True)
+    refresh_limit_per_hour = Column(Integer, nullable=True)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
@@ -118,4 +122,6 @@ class ConfigDeliveryLog(Base):
     config_group_id = Column(Integer, ForeignKey("config_groups.id"), nullable=True)
     action = Column(String, nullable=False)
     success = Column(Boolean, nullable=False)
+    config_version = Column(Integer, nullable=True)
+    config_fingerprint = Column(String(64), nullable=True)
     detail = Column(Text, nullable=True)

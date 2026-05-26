@@ -215,6 +215,17 @@ tr:hover td { background: var(--surface-2); }
   font-size: 12px;
 }
 .checkbox-row input { accent-color: var(--primary); }
+.checkbox-list {
+  display: grid;
+  gap: 7px;
+  max-height: 150px;
+  overflow-y: auto;
+  padding: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.table-checkbox-list { min-width: 220px; }
 .log-filter-form { display: flex; align-items: center; gap: 6px; margin: 0; }
 .log-filter-form input { width: 140px; }
 

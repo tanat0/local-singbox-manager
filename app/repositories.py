@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Iterable, List, Optional
+from typing import List, Optional
 
 from sqlalchemy.orm import Session
 
@@ -29,9 +29,6 @@ class NodeRepository:
 
     def list_all(self) -> List[Node]:
         return self._db.query(Node).all()
-
-    def list_by_tags(self, tags: Iterable[str]) -> List[Node]:
-        return self._db.query(Node).filter(Node.tag.in_(list(tags))).order_by(Node.tag).all()
 
     def get_active(self) -> Optional[Node]:
         return self._db.query(Node).filter(Node.active.is_(True)).first()
@@ -117,6 +114,22 @@ class UserRepository:
     def list_users(self) -> List[ManagedUser]:
         return self._db.query(ManagedUser).order_by(ManagedUser.enabled.desc(), ManagedUser.created_at.desc()).all()
 
+    def list_recent_deliveries(self, limit: int = 50) -> List[ConfigDeliveryLog]:
+        return (
+            self._db.query(ConfigDeliveryLog)
+            .order_by(ConfigDeliveryLog.created_at.desc(), ConfigDeliveryLog.id.desc())
+            .limit(limit)
+            .all()
+        )
+
+    def list_enabled_users_for_group(self, group_id: int) -> List[ManagedUser]:
+        return (
+            self._db.query(ManagedUser)
+            .filter(ManagedUser.config_group_id == group_id, ManagedUser.enabled.is_(True))
+            .order_by(ManagedUser.created_at)
+            .all()
+        )
+
     def get_group(self, group_id: int) -> Optional[ConfigGroup]:
         return self._db.query(ConfigGroup).filter(ConfigGroup.id == group_id).first()
 
@@ -162,6 +175,8 @@ class AuditRepository:
         success: bool,
         managed_user_id: Optional[int] = None,
         config_group_id: Optional[int] = None,
+        config_version: Optional[int] = None,
+        config_fingerprint: Optional[str] = None,
         detail: str = "",
     ) -> None:
         self._db.add(ConfigDeliveryLog(
@@ -170,5 +185,7 @@ class AuditRepository:
             config_group_id=config_group_id,
             action=action,
             success=success,
+            config_version=config_version,
+            config_fingerprint=config_fingerprint,
             detail=detail or None,
         ))

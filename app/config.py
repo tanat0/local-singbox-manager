@@ -72,6 +72,8 @@ class NotificationSettings:
 @dataclass(frozen=True)
 class AppSettings:
     database_url: str = "sqlite:///./singbox_manager.db"
+    migrations_enabled: bool = True
+    background_tasks_enabled: bool = True
     health_check_interval: int = 300
     system_paths: SystemPaths = SystemPaths()
     security: SecuritySettings = SecuritySettings()
@@ -83,6 +85,8 @@ def load_settings(env: Optional[Mapping[str, str]] = None) -> AppSettings:
     source = os.environ if env is None else env
     return AppSettings(
         database_url=source.get("DATABASE_URL", "sqlite:///./singbox_manager.db"),
+        migrations_enabled=_env_bool(source.get("MIGRATIONS_ENABLED", "1")),
+        background_tasks_enabled=_env_bool(source.get("BACKGROUND_TASKS_ENABLED", "1")),
         health_check_interval=_env_int(source.get("HEALTH_CHECK_INTERVAL", "300"), 300),
         system_paths=SystemPaths(
             singbox_bin=source.get("SINGBOX_BIN", "/usr/bin/sing-box"),

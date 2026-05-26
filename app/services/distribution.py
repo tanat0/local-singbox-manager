@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import List, Optional, TYPE_CHECKING
 
-from app.services.users import decode_node_tags
+from app.services.node_tags import decode_node_tags
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -16,6 +19,14 @@ class UserAssignment:
     group: Optional["ConfigGroup"]
     nodes: List["Node"]
     error: str = ""
+    config_version: Optional[int] = None
+    config_fingerprint: str = ""
+    refresh_limit_per_hour: int = 10
+
+
+DELIVERY_ACTIONS = ("/config", "/refresh")
+DEFAULT_REFRESH_LIMIT_PER_HOUR = 10
+RATE_LIMIT_MESSAGE = "Refresh limit reached. Try later."
 
 
 def get_user_assignment(db: "Session", telegram_id: str) -> UserAssignment:
@@ -42,7 +53,51 @@ def get_user_assignment(db: "Session", telegram_id: str) -> UserAssignment:
     nodes = db.query(Node).filter(Node.tag.in_(tags)).order_by(Node.tag).all()
     if not nodes:
         return UserAssignment(user, group, [], "Assigned nodes were not found.")
-    return UserAssignment(user, group, nodes)
+    return UserAssignment(
+        user,
+        group,
+        nodes,
+        config_version=group.config_version,
+        config_fingerprint=config_fingerprint(nodes),
+        refresh_limit_per_hour=effective_refresh_limit(user, group),
+    )
+
+
+def config_fingerprint(nodes: List["Node"]) -> str:
+    payload = [
+        {"tag": node.tag, "protocol": node.protocol, "raw_url": node.raw_url}
+        for node in sorted(nodes, key=lambda item: item.tag)
+    ]
+    raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def effective_refresh_limit(user: "ManagedUser", group: "ConfigGroup") -> int:
+    user_limit = _positive_int_or_none(user.refresh_limit_per_hour)
+    if user_limit is not None:
+        return user_limit
+    group_limit = _positive_int_or_none(group.refresh_limit_per_hour)
+    if group_limit is not None:
+        return group_limit
+    return DEFAULT_REFRESH_LIMIT_PER_HOUR
+
+
+def refresh_limit_exceeded(db: "Session", assignment: UserAssignment, now: Optional[datetime] = None) -> bool:
+    from app.models import ConfigDeliveryLog
+
+    if not assignment.user:
+        return False
+    cutoff = (now or datetime.utcnow()) - timedelta(hours=1)
+    count = (
+        db.query(ConfigDeliveryLog)
+        .filter(
+            ConfigDeliveryLog.telegram_id == assignment.user.telegram_id,
+            ConfigDeliveryLog.action.in_(DELIVERY_ACTIONS),
+            ConfigDeliveryLog.created_at >= cutoff,
+        )
+        .count()
+    )
+    return count >= assignment.refresh_limit_per_hour
 
 
 def record_delivery(
@@ -63,35 +118,16 @@ def record_delivery(
         config_group_id=group.id if group else None,
         action=action,
         success=success,
+        config_version=assignment.config_version if assignment else None,
+        config_fingerprint=assignment.config_fingerprint if assignment else None,
         detail=detail or None,
     ))
     db.commit()
 
 
-def format_user_status(assignment: UserAssignment) -> str:
-    if assignment.error:
-        return assignment.error
-    user = assignment.user
-    group = assignment.group
-    label = (user.display_name or user.telegram_id) if user else "user"
-    return (
-        f"User: {label}\n"
-        f"Group: {group.name if group else '-'}\n"
-        f"Assigned configs: {len(assignment.nodes)}"
-    )
-
-
-def format_user_configs(assignment: UserAssignment) -> str:
-    if assignment.error:
-        return assignment.error
-    group = assignment.group
-    lines = [
-        f"Config group: {group.name if group else '-'}",
-        "Import one of these links in a compatible client:",
-        "",
-    ]
-    for node in assignment.nodes:
-        lines.append(f"{node.tag} [{node.protocol}]")
-        lines.append(node.raw_url)
-        lines.append("")
-    return "\n".join(lines).strip()
+def _positive_int_or_none(value: object) -> Optional[int]:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None

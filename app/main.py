@@ -84,14 +84,19 @@ async def lifespan(app: FastAPI):
     setup_logging()
     _log.info("Sing-Box Manager v%s starting up", VERSION)
     emit_startup_warnings()
-    _run_migrations()
-    health_task = asyncio.create_task(_health_check_loop())
-    telegram_bot = create_bot_from_env()
-    telegram_task = asyncio.create_task(telegram_bot.run_forever()) if telegram_bot else None
+    if app_settings.migrations_enabled:
+        _run_migrations()
+    else:
+        _log.info("Startup migrations disabled")
+    tasks = []
+    if app_settings.background_tasks_enabled:
+        tasks.append(asyncio.create_task(_health_check_loop()))
+        telegram_bot = create_bot_from_env()
+        if telegram_bot:
+            tasks.append(asyncio.create_task(telegram_bot.run_forever()))
+    else:
+        _log.info("Background tasks disabled")
     yield
-    tasks = [health_task]
-    if telegram_task:
-        tasks.append(telegram_task)
     for task in tasks:
         task.cancel()
     for task in tasks:
@@ -101,7 +106,8 @@ async def lifespan(app: FastAPI):
             pass
 
 
-app = FastAPI(title="Sing-Box Manager", docs_url=None, redoc_url=None, lifespan=lifespan)
+_lifespan = lifespan if (app_settings.migrations_enabled or app_settings.background_tasks_enabled) else None
+app = FastAPI(title="Sing-Box Manager", docs_url=None, redoc_url=None, lifespan=_lifespan)
 app.add_middleware(AuthMiddleware)
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 

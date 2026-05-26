@@ -13,7 +13,7 @@ The project stays local-client focused first: stable deploys, clear logs, mainta
 - Add route/page smoke tests for major pages.
 - Keep this phase focused on personal/local sing-box client management.
 
-## Phase 1: Telegram Admin Bot MVP
+## Phase 1: Telegram Admin Bot MVP — Done
 
 - Access is admin-only through explicit Telegram IDs from `.env` or DB.
 - Commands:
@@ -26,7 +26,7 @@ The project stays local-client focused first: stable deploys, clear logs, mainta
 - The bot must reuse existing deploy/service APIs instead of duplicating sing-box logic.
 - All admin actions are written to an audit log.
 
-## Phase 2: User Config Distribution
+## Phase 2: User Config Distribution — Groundwork Done, Hardening In Progress
 
 - Add base web management for config groups and managed Telegram user IDs.
 - Add a users table: Telegram ID, display name, enabled flag, allowed config groups.
@@ -35,6 +35,10 @@ The project stays local-client focused first: stable deploys, clear logs, mainta
   - `/status`: basic availability check.
   - `/refresh`: request the latest assigned config.
 - Track each config delivery attempt for audit and future rate limits.
+- Add selectable node assignments instead of free-form tag entry.
+- Add config group versions and deterministic config fingerprints.
+- Add basic refresh limits per group and optional per-user override.
+- Show delivery history in the Users page.
 - Notify users when their assigned configuration changes.
 - Separate personal/admin nodes from user-visible nodes.
 - For Telegram proxy, provide clickable `tg://proxy` links where applicable.

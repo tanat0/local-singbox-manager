@@ -73,7 +73,9 @@ def format_user_status(assignment: UserAssignment) -> str:
     return (
         f"User: {label}\n"
         f"Group: {group.name if group else '-'}\n"
-        f"Assigned configs: {len(assignment.nodes)}"
+        f"Assigned configs: {len(assignment.nodes)}\n"
+        f"Config version: {assignment.config_version or '-'}\n"
+        f"Fingerprint: {assignment.config_fingerprint[:12] or '-'}"
     )
 
 
@@ -83,6 +85,8 @@ def format_user_configs(assignment: UserAssignment) -> str:
     group = assignment.group
     lines = [
         f"Config group: {group.name if group else '-'}",
+        f"Version: {assignment.config_version or '-'}",
+        f"Fingerprint: {assignment.config_fingerprint[:12] or '-'}",
         "Import one of these links in a compatible client:",
         "",
     ]

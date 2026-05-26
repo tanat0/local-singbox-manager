@@ -44,7 +44,7 @@ def _mock_status():
         "since": "Mon 2024-01-01 12:00:00 UTC",
     }
 
-def _mock_logs(lines=100):
+def _mock_logs(lines=100, mode="all", grep=""):
     return "Jan 01 12:00:00 sing-box[42]: INFO sing-box started\n"
 
 def _mock_validate(config):
@@ -58,6 +58,7 @@ _patches = [
     patch("app.singbox.service._run_helper", side_effect=_mock_helper),
     patch("app.singbox.deployer._service_is_active", return_value=True),
     patch("app.singbox.deployer.validate_config", side_effect=_mock_validate),
+    patch("app.services.dashboard.validate_config", side_effect=_mock_validate),
     patch("app.singbox.service.get_status", side_effect=_mock_status),
     patch("app.singbox.service.get_logs", side_effect=_mock_logs),
     patch("app.singbox.service.get_version", side_effect=_mock_version),

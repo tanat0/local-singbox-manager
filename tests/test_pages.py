@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 import uuid
@@ -47,12 +48,35 @@ alembic_command.upgrade(_alembic_cfg, "head")
 from fastapi.testclient import TestClient  # noqa: E402
 
 from app.main import app  # noqa: E402
+from app.db import SessionLocal  # noqa: E402
+from app.models import Node  # noqa: E402
+from app.parsers import parse_url  # noqa: E402
 
 
 @pytest.fixture(scope="module")
 def client():
     with TestClient(app, raise_server_exceptions=True) as test_client:
         yield test_client
+
+
+def _ensure_node(raw_url: str) -> str:
+    parsed = parse_url(raw_url)
+    db = SessionLocal()
+    try:
+        existing = db.query(Node).filter(Node.tag == parsed.tag).first()
+        if not existing:
+            db.add(Node(
+                tag=parsed.tag,
+                protocol=parsed.protocol,
+                raw_url=parsed.raw_url,
+                parsed_json=json.dumps(parsed.to_dict()),
+                schema_version=parsed.schema_version,
+                active=False,
+            ))
+            db.commit()
+        return parsed.tag
+    finally:
+        db.close()
 
 
 @pytest.mark.parametrize(
@@ -83,26 +107,69 @@ def test_health_and_version_probes(client):
 
 def test_users_create_group_and_user(client):
     suffix = uuid.uuid4().hex[:8]
+    node_tag = _ensure_node(
+        "vless://12345678-abcd-0000-0000-000000000002@1.2.3.4:443"
+        "?security=reality&sni=example.com&pbk=fakepubkey&sid=aabbcc&fp=chrome&type=tcp"
+        f"#page-node-{suffix}"
+    )
     group_name = f"family-{suffix}"
     telegram_id = f"123456789{suffix}"
     group_resp = client.post("/users/groups", data={
         "name": group_name,
         "description": "Family configs",
-        "node_tags": "node-a, node-b",
+        "node_tags": [node_tag],
+        "refresh_limit_per_hour": "3",
         "notes": "limited access",
         "enabled": "on",
     }, follow_redirects=True)
     assert group_resp.status_code == 200
     assert b"Created group" in group_resp.content
     assert group_name.encode() in group_resp.content
+    assert node_tag.encode() in group_resp.content
 
     user_resp = client.post("/users", data={
         "telegram_id": telegram_id,
         "display_name": "Alex",
         "config_group_id": "",
+        "refresh_limit_per_hour": "2",
         "notes": "test user",
         "enabled": "on",
     }, follow_redirects=True)
     assert user_resp.status_code == 200
     assert b"Created user" in user_resp.content
     assert telegram_id.encode() in user_resp.content
+
+
+def test_users_reject_unknown_group_node_tag(client):
+    response = client.post("/users/groups", data={
+        "name": f"bad-family-{uuid.uuid4().hex[:8]}",
+        "node_tags": ["missing-node-tag"],
+        "enabled": "on",
+    }, follow_redirects=True)
+
+    assert response.status_code == 200
+    assert b"Unknown node tag" in response.content
+
+
+def test_users_page_shows_delivery_log(client):
+    from app.models import ConfigDeliveryLog
+
+    db = SessionLocal()
+    try:
+        db.add(ConfigDeliveryLog(
+            telegram_id="9001",
+            action="/refresh",
+            success=True,
+            config_version=2,
+            config_fingerprint="a" * 64,
+            detail="1 config delivered",
+        ))
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get("/users")
+    assert response.status_code == 200
+    assert b"Delivery Log" in response.content
+    assert b"/refresh" in response.content
+    assert b"aaaaaaaaaaaa" in response.content

@@ -12,7 +12,8 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.routes.common import redirect
 from app.services import users as user_service
-from app.services.users import ConfigGroupInput, ManagedUserInput, decode_node_tags
+from app.services.node_tags import decode_node_tags
+from app.services.users import ConfigGroupInput, ManagedUserInput
 from app.web import templates
 
 router = APIRouter()
@@ -24,6 +25,8 @@ async def users_page(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse(request, "users.html", {
         "groups": page.groups,
         "users": page.users,
+        "nodes": page.nodes,
+        "deliveries": page.deliveries,
         "decode_node_tags": decode_node_tags,
         "msg": request.query_params.get("msg", ""),
         "msg_type": request.query_params.get("msg_type", "info"),
@@ -32,29 +35,47 @@ async def users_page(request: Request, db: Session = Depends(get_db)):
 
 @router.post("/users/groups")
 async def create_group(
+    request: Request,
     name: Annotated[str, Form()],
     description: Annotated[str, Form()] = "",
-    node_tags: Annotated[str, Form()] = "",
+    refresh_limit_per_hour: Annotated[str, Form()] = "",
     notes: Annotated[str, Form()] = "",
     enabled: Annotated[str, Form()] = "",
     db: Session = Depends(get_db),
 ):
-    form = ConfigGroupInput(name=name, description=description, node_tags=node_tags, notes=notes, enabled=enabled == "on")
+    form_data = await request.form()
+    form = ConfigGroupInput(
+        name=name,
+        description=description,
+        node_tags=list(form_data.getlist("node_tags")),
+        refresh_limit_per_hour=refresh_limit_per_hour,
+        notes=notes,
+        enabled=enabled == "on",
+    )
     return _user_redirect(user_service.create_group(db, form))
 
 
 @router.post("/users/groups/{group_id}")
 async def update_group(
+    request: Request,
     group_id: int,
     name: Annotated[str, Form()],
     description: Annotated[str, Form()] = "",
-    node_tags: Annotated[str, Form()] = "",
+    refresh_limit_per_hour: Annotated[str, Form()] = "",
     notes: Annotated[str, Form()] = "",
     enabled: Annotated[str, Form()] = "",
     db: Session = Depends(get_db),
 ):
-    form = ConfigGroupInput(name=name, description=description, node_tags=node_tags, notes=notes, enabled=enabled == "on")
-    return _user_redirect(user_service.update_group(db, group_id, form))
+    form_data = await request.form()
+    form = ConfigGroupInput(
+        name=name,
+        description=description,
+        node_tags=list(form_data.getlist("node_tags")),
+        refresh_limit_per_hour=refresh_limit_per_hour,
+        notes=notes,
+        enabled=enabled == "on",
+    )
+    return _user_redirect(await user_service.update_group(db, group_id, form))
 
 
 @router.post("/users/groups/{group_id}/delete")
@@ -67,6 +88,7 @@ async def create_user(
     telegram_id: Annotated[str, Form()],
     display_name: Annotated[str, Form()] = "",
     config_group_id: Annotated[str, Form()] = "",
+    refresh_limit_per_hour: Annotated[str, Form()] = "",
     notes: Annotated[str, Form()] = "",
     enabled: Annotated[str, Form()] = "",
     db: Session = Depends(get_db),
@@ -75,6 +97,7 @@ async def create_user(
         telegram_id=telegram_id,
         display_name=display_name,
         config_group_id=config_group_id,
+        refresh_limit_per_hour=refresh_limit_per_hour,
         notes=notes,
         enabled=enabled == "on",
     )
@@ -87,6 +110,7 @@ async def update_user(
     telegram_id: Annotated[str, Form()],
     display_name: Annotated[str, Form()] = "",
     config_group_id: Annotated[str, Form()] = "",
+    refresh_limit_per_hour: Annotated[str, Form()] = "",
     notes: Annotated[str, Form()] = "",
     enabled: Annotated[str, Form()] = "",
     db: Session = Depends(get_db),
@@ -95,6 +119,7 @@ async def update_user(
         telegram_id=telegram_id,
         display_name=display_name,
         config_group_id=config_group_id,
+        refresh_limit_per_hour=refresh_limit_per_hour,
         notes=notes,
         enabled=enabled == "on",
     )

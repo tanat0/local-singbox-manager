@@ -9,7 +9,7 @@ from app import notify
 from app.health import check_external_ip, run_health_checks
 from app.repositories import AuditRepository, NodeRepository
 from app.services.deploy import ActivationResult, activate_node
-from app.services.distribution import get_user_assignment, record_delivery
+from app.services.distribution import RATE_LIMIT_MESSAGE, get_user_assignment, record_delivery, refresh_limit_exceeded
 from app.singbox import service as svc
 from app.telegram import presenters
 from app.telegram.types import BotResponse, ParsedCommand, TelegramMessage
@@ -144,6 +144,9 @@ class UserCommandHandler:
                 return BotResponse(ok, text)
 
             if command.name in {"/config", "/refresh"}:
+                if not assignment.error and refresh_limit_exceeded(db, assignment):
+                    record_delivery(db, actor, command.name, False, assignment, "refresh limit exceeded")
+                    return BotResponse(False, RATE_LIMIT_MESSAGE)
                 ok = not bool(assignment.error)
                 text = presenters.format_user_configs(assignment)
                 detail = assignment.error or f"{len(assignment.nodes)} config(s) delivered"

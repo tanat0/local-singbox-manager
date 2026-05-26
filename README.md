@@ -168,6 +168,7 @@ NTFY_SERVER=https://ntfy.myserver.com   # for self-hosted ntfy (optional)
 
 # Tuning
 HEALTH_CHECK_INTERVAL=300    # seconds between background health checks (default 300)
+BACKGROUND_TASKS_ENABLED=1   # set 0 only for tests/tooling that should not poll
 SINGBOX_BIN=/usr/bin/sing-box
 HELPER_BIN=/usr/local/bin/singbox-manager-helper
 ```
@@ -451,19 +452,32 @@ enabled on the **Users** page and assigned to an enabled config group:
 ```
 
 `/config` and `/refresh` return the raw proxy URLs assigned through the user's
-config group. Each attempt is written to `config_delivery_log` for later rate
-limits and audit.
+config group, including the group version and a short fingerprint of the
+assigned configs. Each attempt is written to `config_delivery_log` for audit
+and refresh limits.
 
 ## User Distribution Groundwork
 
 The **Users** page stores config groups and managed Telegram user IDs for the
 user-facing bot flow.
 
-- Config groups contain a name, enabled flag, allowed node tags, and notes.
+- Config groups contain a name, enabled flag, selectable allowed nodes, config
+  version, refresh limit, and notes.
 - Managed users contain Telegram ID, display name, enabled flag, assigned group,
-  and notes.
+  optional refresh-limit override, and notes.
 - User-facing `/config`, `/refresh`, and `/status` commands use this data to
   decide what a non-admin user may receive.
+- Assigned config fingerprints are deterministic sha256 hashes of the sorted
+  `tag`, `protocol`, and `raw_url` values for the group's nodes.
+- Config group versions increment when the assigned node set changes.
+- Refresh limits are enforced over a rolling one-hour window. User override
+  wins over group limit; if both are empty, the default is 10 deliveries/hour.
+- When an enabled group's assigned nodes change, the app sends a best-effort
+  Telegram notification to enabled users in that group. Missing bot token or
+  Telegram delivery failures are logged in `config_delivery_log` and do not
+  roll back the group update.
+- The Users page shows recent delivery attempts with action, status, group,
+  version, fingerprint prefix, and detail.
 
 **Events:**
 
@@ -551,9 +565,10 @@ The non-e2e suite covers:
 | `test_auth.py` | Token roundtrip/expiry, rate limiting, CSRF, HTTP middleware |
 | `test_profiles.py` | Profile CRUD, activate/deactivate, state transitions |
 | `test_notify.py` | All channels, priority mapping, error resilience, fire() scheduling |
-| `test_telegram_admin.py` | Telegram dispatcher, admin/user handlers, chunking |
+| `test_telegram_admin.py` | Telegram dispatcher, admin/user handlers, limits, chunking |
+| `test_distribution.py` | User config formatting, fingerprinting, refresh limits |
 | `test_system_clients.py` | subprocess/systemd command boundary |
-| `test_pages.py` | major page render smoke tests |
+| `test_pages.py` | major page render smoke tests and Users distribution UI |
 
 ### E2e tests (Playwright, no root required)
 
