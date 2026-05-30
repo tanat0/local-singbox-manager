@@ -4,12 +4,13 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional
 
 from app.services.node_tags import decode_node_tags
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
+
     from app.models import ConfigGroup, ManagedUser, Node
 
 

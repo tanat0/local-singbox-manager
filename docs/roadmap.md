@@ -1,81 +1,75 @@
-# Local Sing-Box Manager Roadmap
+# Engineering Backlog
 
-## Summary
+This file tracks practical work for the local sing-box manager. It separates
+implemented behavior from backlog ideas so documentation does not imply support
+for features that are not built.
 
-The project stays local-client focused first: stable deploys, clear logs, maintainable code, and reliable node switching. Telegram, user config distribution, server-side management, limits, and MTProto are planned as separate phases so each area can be tested without breaking the current manager.
+## Current State
 
-## Phase 0: Stabilize Local Manager
+- Local FastAPI web UI for a personal sing-box client.
+- Node parsing for VLESS and Hysteria2/Hy2 URLs.
+- Config generation from stored node data plus DNS/route settings.
+- Deploy pipeline with validation, helper-based config replacement, restart,
+  lightweight service health check, backup, rollback, and deploy logs.
+- Profiles for node plus DNS/route preset combinations.
+- Optional password auth, signed cookies, CSRF checks, and login rate limiting.
+- Local diagnostics for logs, health checks, latency history, service status,
+  external IP, and config diff.
+- Optional notifications through `notify-send`, Telegram, and ntfy.
+- Optional Telegram admin bot for local management commands.
+- Managed-user Telegram config delivery with config groups, selected nodes,
+  config versions, fingerprints, refresh limits, and delivery logs.
+- Unit/page tests and Playwright e2e smoke tests with system calls mocked.
 
-- Keep the local service flow stable: install, restart, update repo, restart service.
-- Finish the logical commit split.
-- Keep `app/main.py` as app bootstrap only.
-- Keep routes in `app/routes/` and reusable logic in `app/services/`.
-- Add route/page smoke tests for major pages.
-- Keep this phase focused on personal/local sing-box client management.
+## Near-Term Hardening
 
-## Phase 1: Telegram Admin Bot MVP — Done
+- Keep README short and move operational detail into focused docs.
+- Keep `make lint`, `make test`, and CI green after feature work.
+- Keep local quality gates reproducible through `make check-fast` and `make
+  check`; avoid duplicating command logic in CI.
+- Continue reducing route/service coupling where it gets in the way of tests.
+- Keep test DB isolation strict so local `singbox_manager.db` is not mutated.
+- Add regression tests when changing deploy, auth, Telegram, or user
+  distribution behavior.
+- Review docs after every feature pass for stale claims and unsupported
+  promises.
 
-- Access is admin-only through explicit Telegram IDs from `.env` or DB.
-- Commands:
-  - `/status`: sing-box service state, active node, external IP.
-  - `/nodes`: list nodes with an active marker.
-  - `/activate <node>`: activate a node through the existing deploy pipeline.
-  - `/logs`: recent filtered problems.
-  - `/health`: run current health checks.
-  - `/notify_test`: verify bot delivery.
-- The bot must reuse existing deploy/service APIs instead of duplicating sing-box logic.
-- All admin actions are written to an audit log.
+## User Distribution Follow-Ups
 
-## Phase 2: User Config Distribution — Groundwork Done, Hardening In Progress
+- Separate personal/admin nodes from user-visible nodes if shared use grows.
+- Add clearer UI filters for delivery log review.
+- Add export of config delivery logs for manual audit.
+- Add per-group/user expiry fields only if there is a concrete use case.
+- Support QR or file exports only for specific client formats that can be
+  tested.
 
-- Add base web management for config groups and managed Telegram user IDs.
-- Add a users table: Telegram ID, display name, enabled flag, allowed config groups.
-- User commands:
-  - `/config`: get assigned config or proxy.
-  - `/status`: basic availability check.
-  - `/refresh`: request the latest assigned config.
-- Track each config delivery attempt for audit and future rate limits.
-- Add selectable node assignments instead of free-form tag entry.
-- Add config group versions and deterministic config fingerprints.
-- Add basic refresh limits per group and optional per-user override.
-- Show delivery history in the Users page.
-- Notify users when their assigned configuration changes.
-- Separate personal/admin nodes from user-visible nodes.
-- For Telegram proxy, provide clickable `tg://proxy` links where applicable.
-- For VPN clients, there is no universal one-click add flow; support import links, files, or QR codes where client formats allow it.
+## Operations Follow-Ups
 
-## Phase 3: Abuse Control And Limits
+- Add a small disaster-recovery export containing DB dump instructions,
+  `.env.example`, rendered service/sudoers examples, and current generated
+  config metadata.
+- Improve backup restore documentation for manual recovery after rollback
+  failure.
+- Add a simple smoke command that validates helper install, sudoers, sing-box
+  binary path, and systemd service state without modifying config.
 
-- Add optional policy fields per user or group:
-  - allowed servers/configs
-  - max config refreshes per time window
-  - expiration date
-  - notes/manual risk flag
-- Track data that is realistically observable:
-  - issued configs
-  - refresh/download history
-  - server-side connection telemetry only where the server stack supports it.
-- Treat device binding and IP checks as best-effort controls, not hard security.
-- Do not pretend client-side VPN usage can always be killed cleanly. Reliable enforcement needs server-side firewall/session controls and may only force reconnects.
+## Non-Goals For Now
 
-## Phase 4: Server-Side Management
+- Hosted multi-tenant control plane.
+- General server fleet management.
+- Server-side bandwidth accounting or traffic enforcement.
+- Device binding.
+- Reliable remote kill-switch for distributed client configs.
+- MTProto server inventory or rotation.
+- Claims that Telegram config delivery controls actual VPN usage.
 
-- Add a separate “Servers” section.
-- Model owned servers, their visibility, installed protocols, health, and user availability.
-- Support server-side config generation/deploy for selected protocols.
-- Keep personal-only servers separate from user-available servers.
-- Add an audit log for server changes.
+## Audit Follow-Ups
 
-## Phase 5: MTProto
-
-- Keep MTProto separate from the VPN/proxy node model unless the schema naturally converges.
-- Support MTProto server inventory.
-- Generate Telegram proxy links.
-- Add availability checks and rotation workflow.
-
-## Later Ideas
-
-- Per-node/user cost notes for tracking who uses which paid server.
-- Config group versioning so users can be notified only when their assigned config changes.
-- Safer “dry run” deploy preview for server-side config changes.
-- Minimal export bundle for disaster recovery: DB dump, `.env.example`, service file, and current generated config.
+- Revisit `app/services/users.py` if user distribution gains more behavior.
+- Split broad tests into focused modules when they next need substantial edits.
+- Replace import-time global test patches with fixture-scoped patches where it
+  improves readability without weakening DB/system-call isolation.
+- Consider moving dev/test tools into separate requirements if production
+  packaging becomes a concern.
+- Keep comments focused on constraints and edge cases; avoid comments that
+  restate simple code.

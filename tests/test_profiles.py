@@ -8,7 +8,6 @@ import json
 import os
 import tempfile
 import uuid
-from contextlib import ExitStack
 from unittest.mock import patch
 
 import pytest
@@ -53,6 +52,7 @@ for _p in _patches:
 
 # ── Run migrations ────────────────────────────────────────────────────────────
 from pathlib import Path
+
 from alembic import command as alembic_command
 from alembic.config import Config as AlembicConfig
 
@@ -62,8 +62,9 @@ alembic_command.upgrade(_alembic_cfg, "head")
 
 # ── Import app ────────────────────────────────────────────────────────────────
 from fastapi.testclient import TestClient
-from app.main import app
+
 from app.db import SessionLocal
+from app.main import app
 from app.models import Node, Profile, Settings
 
 VLESS_URL = (
@@ -343,7 +344,6 @@ def test_delete_active_profile_does_not_affect_deployed_config(client, node_in_d
     work = _get_profile("work")
     client.post(f"/profiles/{work.id}/activate")
 
-    node = _get_node(node_in_db)
     client.post(f"/profiles/{work.id}/delete")
 
     # Node still active even after profile deleted

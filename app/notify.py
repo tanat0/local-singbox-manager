@@ -132,10 +132,6 @@ class NotificationService:
             _log.warning("notification scheduling failed: %s", exc)
 
 
-def create_notification_service() -> NotificationService:
-    return NotificationService()
-
-
 # ── Status introspection (for Settings UI) ───────────────────────────────────
 
 def channels_status() -> Dict[str, object]:

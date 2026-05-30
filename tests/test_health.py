@@ -5,18 +5,18 @@ These tests do not make real network connections or system calls:
 they mock subprocess/socket and verify CheckResult shape and HealthReport
 computed properties.
 """
-import asyncio
 from contextlib import ExitStack
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
 from app.health import (
-    CheckResult, HealthReport,
-    check_service, check_tun_interface,
-    check_dns, check_tcp, check_https,
+    CheckResult,
+    HealthReport,
+    check_service,
+    check_tun_interface,
     run_health_checks,
 )
-
 
 # ── CheckResult ───────────────────────────────────────────────────────────────
 

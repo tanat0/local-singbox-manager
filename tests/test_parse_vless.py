@@ -1,5 +1,6 @@
 import pytest
-from app.parsers.vless import parse_vless, VlessNode
+
+from app.parsers.vless import VlessNode, parse_vless
 from app.singbox.generator import build_outbound
 
 REALITY_URL = (

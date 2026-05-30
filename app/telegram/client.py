@@ -23,7 +23,12 @@ class TelegramApiClient:
         result = data.get("result")
         return dict(result) if isinstance(result, dict) else {}
 
-    async def get_updates(self, offset: Optional[int], timeout: int, allowed_updates: List[str]) -> List[Dict[str, Any]]:
+    async def get_updates(
+        self,
+        offset: Optional[int],
+        timeout: int,
+        allowed_updates: List[str],
+    ) -> List[Dict[str, Any]]:
         payload: Dict[str, Any] = {"timeout": timeout, "allowed_updates": allowed_updates}
         if offset is not None:
             payload["offset"] = offset

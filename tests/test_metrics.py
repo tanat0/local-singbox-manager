@@ -40,6 +40,7 @@ for _p in _patches:
 
 # ── Run migrations against the temp DB before importing app ──────────────────
 from pathlib import Path
+
 from alembic import command as alembic_command
 from alembic.config import Config as AlembicConfig
 
@@ -49,9 +50,10 @@ alembic_command.upgrade(_alembic_cfg, "head")
 
 # ── Now import app ────────────────────────────────────────────────────────────
 from fastapi.testclient import TestClient  # noqa: E402
-from app.main import app                   # noqa: E402
-from app.db import SessionLocal            # noqa: E402
-from app.models import HealthCheckLog      # noqa: E402
+
+from app.db import SessionLocal  # noqa: E402
+from app.main import app  # noqa: E402
+from app.models import HealthCheckLog  # noqa: E402
 
 
 @pytest.fixture(scope="module")

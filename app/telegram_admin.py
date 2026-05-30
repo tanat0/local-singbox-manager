@@ -3,21 +3,15 @@ from __future__ import annotations
 from typing import Optional, Set
 
 from app.config import parse_id_set
-from app.telegram.bot import (
-    TELEGRAM_ADMIN_BOT_ENABLED as _TELEGRAM_ADMIN_BOT_ENABLED,
-    TELEGRAM_ADMIN_IDS_RAW as _TELEGRAM_ADMIN_IDS_RAW,
-    TELEGRAM_BOT_TOKEN as _TELEGRAM_BOT_TOKEN,
-    TelegramBotRunner,
-    build_dispatcher,
-    command_parts as _command_parts,
-    create_bot_from_env,
-    handle_message,
-)
+from app.telegram import bot as telegram_bot
 from app.telegram.client import TelegramApiClient
 
-TELEGRAM_BOT_TOKEN = _TELEGRAM_BOT_TOKEN
-TELEGRAM_ADMIN_IDS_RAW = _TELEGRAM_ADMIN_IDS_RAW
-TELEGRAM_ADMIN_BOT_ENABLED = _TELEGRAM_ADMIN_BOT_ENABLED
+TELEGRAM_BOT_TOKEN = telegram_bot.TELEGRAM_BOT_TOKEN
+TELEGRAM_ADMIN_IDS_RAW = telegram_bot.TELEGRAM_ADMIN_IDS_RAW
+TELEGRAM_ADMIN_BOT_ENABLED = telegram_bot.TELEGRAM_ADMIN_BOT_ENABLED
+_command_parts = telegram_bot.command_parts
+create_bot_from_env = telegram_bot.create_bot_from_env
+handle_message = telegram_bot.handle_message
 
 
 def parse_admin_ids(raw: Optional[str] = None) -> Set[int]:
@@ -32,9 +26,9 @@ def is_enabled() -> bool:
     )
 
 
-class TelegramAdminBot(TelegramBotRunner):
+class TelegramAdminBot(telegram_bot.TelegramBotRunner):
     def __init__(self, token: str, admin_ids: Set[int]) -> None:
-        super().__init__(TelegramApiClient(token), build_dispatcher(admin_ids))
+        super().__init__(TelegramApiClient(token), telegram_bot.build_dispatcher(admin_ids))
 
 __all__ = [
     "TELEGRAM_ADMIN_BOT_ENABLED",

@@ -47,8 +47,8 @@ alembic_command.upgrade(_alembic_cfg, "head")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app.main import app  # noqa: E402
 from app.db import SessionLocal  # noqa: E402
+from app.main import app  # noqa: E402
 from app.models import Node  # noqa: E402
 from app.parsers import parse_url  # noqa: E402
 

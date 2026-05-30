@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+branch="$(git branch --show-current 2>/dev/null || true)"
+
+if [[ "$branch" == "main" ]]; then
+  echo "Blocked: direct push from main is not allowed. Use a feature branch and PR."
+  exit 1
+fi
+
+if [[ "${SKIP_PRE_PUSH:-}" == "1" ]]; then
+  echo "SKIP_PRE_PUSH=1; skipping pre-push checks."
+  exit 0
+fi
+
+make check-fast

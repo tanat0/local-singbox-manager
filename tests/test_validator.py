@@ -2,10 +2,9 @@
 from __future__ import annotations
 
 import subprocess
-from contextlib import ExitStack
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from app.singbox.validator import validate_config, SINGBOX_BIN
+from app.singbox.validator import SINGBOX_BIN, validate_config
 
 
 def _proc(returncode: int, stdout: str = "", stderr: str = "") -> MagicMock:
@@ -61,7 +60,6 @@ def test_unknown_exception_returned_as_string():
 
 
 def test_temp_file_cleaned_up_on_success(tmp_path):
-    import os
     with patch("subprocess.run", return_value=_proc(0)):
         validate_config({"a": 1})
     # All /tmp/singbox-check-*.json files should be gone
@@ -71,7 +69,6 @@ def test_temp_file_cleaned_up_on_success(tmp_path):
 
 def test_temp_file_cleaned_up_on_failure():
     import glob
-    import os
     with patch("subprocess.run", return_value=_proc(1, stderr="err")):
         validate_config({"a": 1})
     leftovers = glob.glob("/tmp/singbox-check-*.json")

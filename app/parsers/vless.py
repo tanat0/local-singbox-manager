@@ -1,6 +1,7 @@
 from __future__ import annotations
+
 from typing import Optional
-from urllib.parse import urlparse, parse_qs, unquote
+from urllib.parse import parse_qs, unquote, urlparse
 
 from app.parsers.base import ParsedNode
 from app.parsers.registry import register

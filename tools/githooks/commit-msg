@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+msg_file="${1:?commit message file is required}"
+first_line="$(sed -n '1p' "$msg_file")"
+
+if printf '%s\n' "$first_line" | grep -qiE '^(wip|tmp|temp|test|asdf|qwe)(:|$|[[:space:]])'; then
+  echo "Blocked: commit message looks temporary. Use a specific message."
+  exit 1
+fi

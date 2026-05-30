@@ -69,6 +69,7 @@ for _p in _patches:
 
 # ── 3. Import app AFTER env + patches are in place ──────────────────────────
 import uvicorn  # noqa: E402
+
 from app.main import app  # noqa: E402  (triggers _run_migrations on import)
 
 # ── 4. Server lifecycle ──────────────────────────────────────────────────────

@@ -1,13 +1,14 @@
 from __future__ import annotations
+
 import copy
 import json
 from typing import Any
 
 from app.parsers.base import ParsedNode
-from app.parsers.vless import VlessNode
 from app.parsers.hysteria2 import Hysteria2Node
-from app.singbox.dns import DNS_PRESETS, DEFAULT_DNS_PRESET
-from app.singbox.routes import ROUTE_PRESETS, DEFAULT_ROUTE_PRESET
+from app.parsers.vless import VlessNode
+from app.singbox.dns import DEFAULT_DNS_PRESET, DNS_PRESETS
+from app.singbox.routes import DEFAULT_ROUTE_PRESET, ROUTE_PRESETS
 
 _TUN_INBOUND: dict[str, Any] = {
     "type": "tun",

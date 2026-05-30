@@ -4,8 +4,8 @@ from __future__ import annotations
 import pytest
 
 from app.parsers import parse_url, supported_schemes
-from app.parsers.vless import VlessNode
 from app.parsers.hysteria2 import Hysteria2Node
+from app.parsers.vless import VlessNode
 
 _VLESS_URL = (
     "vless://some-uuid-here@example.com:443"

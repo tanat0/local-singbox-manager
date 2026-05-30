@@ -1,5 +1,6 @@
 import pytest
-from app.parsers.hysteria2 import parse_hysteria2, Hysteria2Node
+
+from app.parsers.hysteria2 import Hysteria2Node, parse_hysteria2
 from app.singbox.generator import build_outbound
 
 BASE_URL = "hysteria2://mypassword@1.2.3.4:443?sni=example.com#hy2-test"

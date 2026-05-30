@@ -8,18 +8,16 @@ Tests for app/singbox/deployer.py:
 from __future__ import annotations
 
 import asyncio
-import os
-import tempfile
 from contextlib import ExitStack
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 
 from app.singbox.deployer import (
-    config_hash,
-    _extract_backup_name,
-    deploy_with_rollback,
     DeployResult,
+    _extract_backup_name,
+    config_hash,
+    deploy_with_rollback,
 )
 
 

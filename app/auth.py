@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import os
 import secrets
 import time
 from collections import defaultdict
@@ -23,8 +22,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse, Response
 
-from app.logging_config import get_logger
 from app.config import settings
+from app.logging_config import get_logger
 
 _log = get_logger(__name__)
 

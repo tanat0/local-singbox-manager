@@ -1,7 +1,8 @@
 import pytest
-from app.parsers.vless import parse_vless, VlessNode
-from app.parsers.hysteria2 import parse_hysteria2, Hysteria2Node
-from app.singbox.generator import generate_config, build_outbound
+
+from app.parsers.hysteria2 import Hysteria2Node, parse_hysteria2
+from app.parsers.vless import VlessNode, parse_vless
+from app.singbox.generator import build_outbound, generate_config
 
 VLESS_URL = (
     "vless://some-uuid@1.2.3.4:443"

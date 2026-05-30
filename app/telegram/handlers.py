@@ -14,7 +14,6 @@ from app.singbox import service as svc
 from app.telegram import presenters
 from app.telegram.types import BotResponse, ParsedCommand, TelegramMessage
 
-
 SessionFactory = Callable[[], Session]
 StatusProvider = Callable[[], dict]
 LogProvider = Callable[[int, str], str]
@@ -127,7 +126,14 @@ class UserCommandHandler:
         try:
             assignment = get_user_assignment(db, actor)
             if assignment.user is None:
-                record_delivery(db, actor, command.name or "unknown", False, assignment, assignment.error or "access denied")
+                record_delivery(
+                    db,
+                    actor,
+                    command.name or "unknown",
+                    False,
+                    assignment,
+                    assignment.error or "access denied",
+                )
                 return BotResponse(False, "Access denied.")
 
             if command.name in {"/start", "/help"}:

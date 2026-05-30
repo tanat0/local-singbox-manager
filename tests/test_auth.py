@@ -7,10 +7,10 @@ the auth state seen by other test modules.
 """
 from __future__ import annotations
 
-import time
 import asyncio
+import time
 from contextlib import ExitStack
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -19,12 +19,12 @@ from starlette.responses import Response
 import app.auth as auth
 from app.auth import (
     SESSION_COOKIE,
-    create_session_token,
-    verify_session_token,
-    verify_password,
-    rate_limit_ok,
-    is_authenticated,
     check_csrf,
+    create_session_token,
+    is_authenticated,
+    rate_limit_ok,
+    verify_password,
+    verify_session_token,
 )
 
 _TEST_PASSWORD = "s3cr3t-test-pw"

@@ -10,7 +10,7 @@ from app.logging_config import get_logger
 from app.telegram.client import TelegramApiClient
 from app.telegram.dispatcher import TelegramDispatcher
 from app.telegram.handlers import AdminCommandHandler, AdminHandlerDeps, UserCommandHandler, UserHandlerDeps
-from app.telegram.types import TelegramMessage, command_parts
+from app.telegram.types import TelegramMessage, command_parts  # noqa: F401
 
 _log = get_logger(__name__)
 _POLL_TIMEOUT = 25

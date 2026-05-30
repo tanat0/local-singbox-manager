@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+branch="$(git branch --show-current 2>/dev/null || true)"
+
+if [[ -z "$branch" ]]; then
+  echo "Blocked: detached HEAD commits are not allowed."
+  exit 1
+fi
+
+if [[ "$branch" == "main" ]]; then
+  echo "Blocked: commits to main are not allowed. Use a feature branch."
+  exit 1
+fi
+
+if git diff --cached --name-only --diff-filter=ACMR | grep -qE '^(app|tests|scripts|migrations)/.*\.py$'; then
+  echo "pre-commit: staged Python changed; running make lint"
+  make lint
+fi

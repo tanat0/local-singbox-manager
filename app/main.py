@@ -5,17 +5,16 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
-
 from alembic import command as alembic_command
 from alembic.config import Config as AlembicConfig
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from app import notify
 from app.auth import AuthMiddleware, emit_startup_warnings
 from app.config import settings as app_settings
 from app.db import SessionLocal
-from app.health import run_health_checks
+from app.health import HealthReport, run_health_checks
 from app.logging_config import get_logger, setup_logging
 from app.models import HealthCheckLog
 from app.routes import dashboard, logs, nodes, profiles, settings, system, users
@@ -67,7 +66,7 @@ async def _health_check_loop() -> None:
         await asyncio.sleep(_HEALTH_CHECK_INTERVAL)
 
 
-def _notify_health_change(prev: str, current: str, report: "HealthReport") -> None:  # type: ignore[name-defined]
+def _notify_health_change(prev: str, current: str, report: HealthReport) -> None:
     if prev == current or prev == "unknown":
         return
     if current == "connected":

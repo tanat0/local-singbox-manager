@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 from typing import Callable, Dict, List
+
 from app.parsers.base import ParsedNode
 
 _REGISTRY: Dict[str, Callable[[str], ParsedNode]] = {}

@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+prev="${ORIG_HEAD:-HEAD~1}"
+new="HEAD"
+
+changed="$(git diff --name-only "$prev" "$new" -- requirements.txt pyproject.toml pytest.ini .github/workflows 2>/dev/null || true)"
+if [[ -n "$changed" ]]; then
+  echo "Dependencies or checks changed:"
+  echo "$changed"
+  echo "Recommended: make install && make check-fast"
+fi

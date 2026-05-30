@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from typing import Any, Dict
 
 DEFAULT_ROUTE_PRESET = "full_tunnel"

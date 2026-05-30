@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from typing import Any
 
 DEFAULT_DNS_PRESET = "quad9_tls"

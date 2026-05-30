@@ -6,12 +6,11 @@ All HTTP calls and subprocess.run are mocked — no real network or system calls
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app import notify
-
 
 # ── channels_status ───────────────────────────────────────────────────────────
 

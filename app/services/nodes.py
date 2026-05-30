@@ -10,8 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.geo import lookup_node_geo
 from app.models import DeployLog, Node
-from app.parsers import Hysteria2Node, ParsedNode, VlessNode
-from app.parsers import parse_url
+from app.parsers import Hysteria2Node, ParsedNode, VlessNode, parse_url
 from app.repositories import DeployLogRepository, NodeRepository
 
 logger = logging.getLogger(__name__)

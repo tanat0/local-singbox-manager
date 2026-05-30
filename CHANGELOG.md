@@ -11,12 +11,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - User distribution hardening: selectable node assignments, config versions,
   deterministic fingerprints, refresh limits, delivery log visibility, and
   best-effort Telegram notifications when assigned configs change.
+- Local quality gates: check-only git hooks, `make check-fast`, `make check`,
+  and `make doctor`.
 
 ### Changed
 - Background health and Telegram polling can be disabled for tests with
   `BACKGROUND_TASKS_ENABLED=0`.
 - Unit tests now use an isolated temp database by default instead of the local
   `singbox_manager.db`.
+- README is now a short entrypoint; install, operations, architecture, and
+  design notes live in focused `docs/` files.
+- CI and local checks now run Ruff in check-only mode with basic bugbear and
+  comprehension rules.
+- Dependency metadata now lives in `pyproject.toml` with `uv.lock`; tracked
+  requirements files are compatibility exports.
 
 ---
 
