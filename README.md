@@ -4,36 +4,70 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://www.python.org/)
 
-Local web UI for managing a personal [sing-box](https://sing-box.sagernet.org/)
-client on Linux. It is intended to run on the same host as sing-box and bind to
-`127.0.0.1:9090`.
+Local-first management utility for operating a small trusted
+[sing-box](https://sing-box.sagernet.org/) setup on Linux. It is intended to run
+on the same host as sing-box and bind to `127.0.0.1:9090`.
 
-This is not a hosted control plane. It stores local proxy URLs, generates a
-sing-box config for one selected node/profile, deploys that config through a
-small sudo helper, and keeps local audit logs in SQLite.
+This is not a hosted VPN panel or public control plane. It stores local proxy
+URLs, generates sing-box configs, deploys them through a small sudo helper, and
+keeps local audit logs in SQLite.
 
 Current released version: `1.3.0`. `main` also contains the unreleased `1.3.1`
 hardening work listed in [CHANGELOG.md](CHANGELOG.md).
 
-## Implemented
+## Why This Exists
+
+This project was built for a small trusted setup where one technical user
+manages sing-box configuration for personal devices and a few family or friend
+devices.
+
+The goal is to avoid manual config sharing, repeated explanations, and fragile
+copy-paste updates when nodes, profiles, or generated links change.
+
+It is intentionally local-first and small-scope: one trusted operator, one
+managed host, a small number of known users and devices, no public multi-tenant
+control plane, and no remote exposure by default.
+
+## Scope
+
+### Core Scope
 
 - Parse and store `vless://`, `hysteria2://`, and `hy2://` node URLs.
-- Generate sing-box client configs with DNS and route presets.
+- Generate sing-box client configs from validated inputs with DNS and route
+  presets.
 - Activate a node or profile through validate, deploy, restart, health check,
   and rollback steps.
-- Keep deploy, health, admin action, and user config delivery logs in SQLite.
+- Keep deploy, health, and admin action logs in SQLite.
+
+### Small Trusted-User Workflow
+
+- Store managed Telegram users and groups.
+- Generate user-specific config links from selected nodes.
+- Send config updates through Telegram.
+- Track group versions, deterministic config fingerprints, delivery attempts,
+  and refresh limits.
+- Reduce manual support for family or friend devices.
+
+### Operational Helpers
+
+- Local diagnostics pages for logs, service state, health checks, and latency
+  history.
 - Optional single-admin web auth with signed cookies and basic CSRF checks.
 - Optional notifications through `notify-send`, Telegram, and ntfy.sh.
 - Optional Telegram admin bot for status, logs, node listing, and activation.
-- Optional managed-user config delivery over Telegram with group versions,
-  deterministic fingerprints, delivery logs, and refresh limits.
-- Local diagnostics pages for logs, service state, health checks, and latency
-  history.
+
+## Non-Goals
+
+This project is not:
+
+- a hosted VPN panel
+- a public multi-tenant control plane
+- a commercial proxy management platform
+- a replacement for enterprise device management
+- intended to be exposed directly to the Internet
 
 ## Known Limitations
 
-- The panel is a local management tool. Do not expose it to the LAN or Internet
-  without adding a trusted reverse proxy and authentication.
 - Proxy credentials are stored in plaintext in `singbox_manager.db`.
 - User distribution sends raw proxy URLs. It does not enforce actual VPN usage
   server-side.
@@ -67,15 +101,11 @@ For development checks and tests:
 make dev-install
 ```
 
-Preview the systemd service and sudoers rule:
+Install the helper, sudoers rule, service file, and initial `.env` after
+reviewing the dry run:
 
 ```bash
 bash scripts/install-systemd.sh --dry-run
-```
-
-Install the helper, sudoers rule, service file, and initial `.env`:
-
-```bash
 bash scripts/install-systemd.sh
 ```
 
@@ -105,12 +135,9 @@ Full install and upgrade notes are in [docs/install.md](docs/install.md).
 
 ## Basic Use
 
-1. Open **Nodes**.
-2. Paste a supported proxy URL.
-3. Save it.
-4. Click **Activate** on a node or create a **Profile** that combines a node
-   with DNS and route presets.
-5. Check **Dashboard**, **Logs**, and **Diagnostics** if activation fails.
+Open **Nodes**, paste a supported proxy URL, save it, then activate a node or
+create a **Profile** that combines a node with DNS and route presets. Check
+**Dashboard**, **Logs**, and **Diagnostics** if activation fails.
 
 Deploys are serialized with an in-process lock. Each deploy writes a backup
 before replacing `/etc/sing-box/config.json`. If restart or the lightweight
@@ -121,24 +148,10 @@ Operational details are in [docs/ops.md](docs/ops.md).
 ## Configuration
 
 The app reads `.env` when started by `make run` or the installed systemd unit.
-Common settings:
-
-| Variable | Purpose |
-| --- | --- |
-| `DATABASE_URL` | SQLite URL, defaults to `sqlite:///./singbox_manager.db` |
-| `SINGLE_ADMIN_PASSWORD` | Enables the login page |
-| `SESSION_SECRET` | Signs session cookies |
-| `SINGBOX_BIN` | sing-box binary path |
-| `HELPER_BIN` | privileged helper path |
-| `HEALTH_CHECK_INTERVAL` | background health interval in seconds |
-| `MIGRATIONS_ENABLED` | set `0` only for tests/tooling |
-| `BACKGROUND_TASKS_ENABLED` | set `0` only for tests/tooling |
-| `TELEGRAM_BOT_TOKEN` | Telegram bot token for notifications and bot flows |
-| `TELEGRAM_CHAT_ID` | Telegram notification chat ID |
-| `TELEGRAM_ADMIN_IDS` | comma-separated admin Telegram user IDs |
-| `NTFY_TOPIC` | enables ntfy notifications |
-
-See `.env.example` and [docs/install.md](docs/install.md) for the full list.
+Common settings include `DATABASE_URL`, `SINGLE_ADMIN_PASSWORD`,
+`SESSION_SECRET`, sing-box/helper paths, background task flags, Telegram
+settings, and ntfy settings. See `.env.example` and
+[docs/install.md](docs/install.md) for the full list.
 
 ## Architecture Summary
 
@@ -179,24 +192,13 @@ local-only guard. It is still your responsibility not to publish the panel.
 
 ## Tests And Checks
 
-```bash
-make lint
-make test
-make e2e
-make check-fast
-make check
-```
+Run `make lint`, `make test`, `make e2e`, `make check-fast`, or `make check`.
+Dependencies are defined in `pyproject.toml`, locked in `uv.lock`, and exported
+to `requirements.txt` / `requirements-dev.txt` for pip-based environments.
 
-Dependencies are defined in `pyproject.toml` and locked in `uv.lock`.
-`requirements.txt` and `requirements-dev.txt` are compatibility exports for
-pip-based environments.
-
-`make test` runs non-e2e tests with a temp SQLite database and mocked system
-calls. `make e2e` starts a real uvicorn server on `127.0.0.1:19090` and uses
-Playwright with system calls mocked.
-
-`make check-fast` runs lint plus non-e2e tests. `make check` also runs e2e.
-CI calls the same Make targets for lint and non-e2e tests.
+`make test` uses a temp SQLite database and mocked system calls. `make e2e`
+starts uvicorn on `127.0.0.1:19090` and uses Playwright with system calls
+mocked. CI calls the same Make targets for lint and non-e2e tests.
 
 Optional local git hooks are available:
 
@@ -210,11 +212,10 @@ manual bypass.
 
 ## Repository Notes
 
-- Schema changes are Alembic migrations under `migrations/versions`.
-- The tracked `sudoers.d/singbox-manager` and `singbox-manager.service` files
-  are templates rendered by `scripts/install-systemd.sh`.
-- The local database, virtualenv, caches, and `.env` files are ignored by git.
-- Changelog entries live in [CHANGELOG.md](CHANGELOG.md).
+Schema changes live under `migrations/versions`. The tracked sudoers and
+systemd files are templates rendered by `scripts/install-systemd.sh`. Local
+database files, virtualenvs, caches, and `.env` files are ignored by git.
+Changelog entries live in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
