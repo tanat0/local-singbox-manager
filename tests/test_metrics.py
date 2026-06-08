@@ -7,6 +7,7 @@ from __future__ import annotations
 import os
 import tempfile
 from datetime import datetime, timedelta
+from typing import Optional
 from unittest.mock import patch
 
 import pytest
@@ -54,6 +55,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.db import SessionLocal  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import HealthCheckLog  # noqa: E402
+from app.services.metrics import node_health_summary  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -76,7 +78,8 @@ def clean_health_logs():
 
 
 def _seed(check_name: str, category: str = "connectivity",
-          n: int = 5, ok: bool = True, latency: float = 42.0):
+          n: int = 5, ok: bool = True, latency: float = 42.0,
+          node_tag: Optional[str] = None):
     db = SessionLocal()
     now = datetime.utcnow()
     try:
@@ -84,7 +87,7 @@ def _seed(check_name: str, category: str = "connectivity",
             ts = now - timedelta(minutes=5 * (n - i))
             db.add(HealthCheckLog(
                 checked_at=ts, check_name=check_name, category=category,
-                ok=ok, latency_ms=latency if ok else None,
+                node_tag=node_tag, ok=ok, latency_ms=latency if ok else None,
                 detail="ok" if ok else "timeout",
             ))
         db.commit()
@@ -169,3 +172,20 @@ def test_metrics_failed_points_have_null_ms(client):
     assert dns is not None
     failed = [p for p in dns["points"] if not p["ok"]]
     assert all(p["ms"] is None for p in failed)
+
+
+def test_node_health_summary_groups_by_active_node_tag(client):
+    _seed("DNS (google.com)", node_tag="node-a", n=3, latency=20.0)
+    _seed("HTTPS https://www.google.com", node_tag="node-b", n=2, ok=False)
+    _seed("TCP 1.1.1.1:80", node_tag=None, n=2, latency=10.0)
+
+    db = SessionLocal()
+    try:
+        summary = node_health_summary(db, 24)
+    finally:
+        db.close()
+
+    assert set(summary) == {"node-a", "node-b"}
+    assert summary["node-a"]["uptime_pct"] == 100.0
+    assert summary["node-a"]["avg_ms"] == 20.0
+    assert summary["node-b"]["uptime_pct"] == 0.0

@@ -12,11 +12,13 @@ from app.services.dashboard import (
     render_config_diff,
     render_external_ip,
     render_health_report,
+    render_log_insights,
     render_log_output,
     render_sysinfo,
     validate_node_config,
 )
-from app.services.metrics import latency_series
+from app.services.log_insights import summarize_problem_logs
+from app.services.metrics import connectivity_summary, latency_series, node_health_summary
 from app.services.nodes import latest_deploy_logs
 from app.singbox import service as svc
 from app.singbox.deployer import get_current_config
@@ -36,6 +38,9 @@ async def dashboard(request: Request, db: Session = Depends(get_db)):
         "active_profile": profile_repo.get_active(),
         "nodes": node_repo.list_for_dashboard(),
         "latest_logs": latest_deploy_logs(db),
+        "health_24h": connectivity_summary(db, 24),
+        "health_7d": connectivity_summary(db, 168),
+        "node_health": node_health_summary(db, 168),
         "msg": request.query_params.get("msg", ""),
         "msg_type": request.query_params.get("msg_type", "info"),
     })
@@ -76,6 +81,13 @@ async def api_logs(lines: int = 100, mode: str = "all", grep: str = ""):
     lines = min(lines, 500)
     mode = mode if mode in {"all", "problems", "fatal"} else "all"
     return HTMLResponse(render_log_output(svc.get_logs(lines, mode=mode, grep=grep)))
+
+
+@router.get("/api/log-insights", response_class=HTMLResponse)
+async def api_log_insights(lines: int = 500):
+    bounded_lines = min(max(lines, 50), 2000)
+    text = svc.get_logs(bounded_lines, mode="problems")
+    return HTMLResponse(render_log_insights(summarize_problem_logs(text)))
 
 
 @router.get("/api/health", response_class=HTMLResponse)

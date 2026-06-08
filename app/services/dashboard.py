@@ -3,13 +3,14 @@ from __future__ import annotations
 import difflib
 import json
 from dataclasses import dataclass
-from typing import Optional
+from typing import List, Optional
 
 from markupsafe import escape
 from sqlalchemy.orm import Session
 
 from app.health import HealthReport
 from app.models import Node
+from app.services.log_insights import LogInsight
 from app.services.nodes import deserialize_node
 from app.services.settings import presets, singbox_log_level
 from app.singbox.generator import generate_config
@@ -47,6 +48,31 @@ def render_external_ip(ip: Optional[str], error: str) -> str:
 
 def render_log_output(text: str) -> str:
     return f'<pre class="log-output">{escape(text)}</pre>'
+
+
+def render_log_insights(insights: List[LogInsight]) -> str:
+    if not insights:
+        return '<p class="text-dim">No recent connection or DNS problems found.</p>'
+
+    rows = []
+    for item in insights:
+        outbound = _outbound_label(item)
+        target = escape(item.target or "—")
+        rows.append(
+            "<tr>"
+            f"<td><span class=\"badge badge-red\">{escape(item.kind)}</span></td>"
+            f"<td>{outbound}</td>"
+            f"<td><code>{target}</code></td>"
+            f"<td>{escape(item.reason)}</td>"
+            f"<td>{item.count}</td>"
+            f"<td class=\"text-dim\">{escape(item.last_seen or '—')}</td>"
+            "</tr>"
+        )
+    return (
+        "<table><thead><tr>"
+        "<th>Kind</th><th>Outbound</th><th>Target</th><th>Reason</th><th>Count</th><th>Last Seen</th>"
+        f"</tr></thead><tbody>{''.join(rows)}</tbody></table>"
+    )
 
 
 def render_health_report(report: HealthReport) -> str:
@@ -120,6 +146,12 @@ def _health_table(checks) -> str:
         '<table><thead><tr><th></th><th>Check</th><th>Latency</th><th>Detail</th></tr></thead>'
         f'<tbody>{"".join(rows)}</tbody></table>'
     )
+
+
+def _outbound_label(item: LogInsight) -> str:
+    if item.protocol and item.outbound_tag:
+        return f"{escape(item.protocol)} / <strong>{escape(item.outbound_tag)}</strong>"
+    return '<span class="text-dim">—</span>'
 
 
 def _render_diff_line(line: str) -> str:

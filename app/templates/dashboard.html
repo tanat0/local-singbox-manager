@@ -55,6 +55,36 @@
   </div>
 
   <div class="card">
+    <h2>Tunnel Health</h2>
+    <div class="block-gap-sm">
+      {% if health_24h.uptime_pct is not none %}
+        <span class="badge {% if health_24h.uptime_pct >= 99 %}badge-green{% elif health_24h.uptime_pct >= 90 %}badge-warning{% else %}badge-red{% endif %}">
+          24h {{ "%.1f"|format(health_24h.uptime_pct) }}%
+        </span>
+      {% else %}
+        <span class="badge badge-gray">24h —</span>
+      {% endif %}
+      {% if health_7d.uptime_pct is not none %}
+        <span class="badge {% if health_7d.uptime_pct >= 99 %}badge-green{% elif health_7d.uptime_pct >= 90 %}badge-warning{% else %}badge-red{% endif %}">
+          7d {{ "%.1f"|format(health_7d.uptime_pct) }}%
+        </span>
+      {% else %}
+        <span class="badge badge-gray">7d —</span>
+      {% endif %}
+    </div>
+    <div class="text-dim mt-sm">
+      {% if health_24h.sample_count %}
+        {{ health_24h.sample_count }} connectivity samples in 24h
+      {% else %}
+        No background health samples yet.
+      {% endif %}
+    </div>
+    <div class="toolbar toolbar-tight">
+      <a href="/diagnostics" class="btn btn-outline">Latency Charts →</a>
+    </div>
+  </div>
+
+  <div class="card">
     <h2>External IP</h2>
     <div id="ip-display" hx-get="/api/ip" hx-trigger="load" hx-swap="innerHTML">
       <span class="text-dim">Checking…</span>
@@ -77,7 +107,7 @@
   <table>
     <thead>
       <tr>
-        <th>Node</th><th>Location</th><th>Provider</th><th>Last Deploy</th><th>Action</th>
+        <th>Node</th><th>Location</th><th>Provider</th><th>Observed Health</th><th>Last Deploy</th><th>Action</th>
       </tr>
     </thead>
     <tbody>
@@ -98,6 +128,17 @@
           {% endif %}
         </td>
         <td>{{ node.provider_name or node.provider_suggestion or "—" }}</td>
+        <td>
+          {% set observed = node_health.get(node.tag) %}
+          {% if observed and observed.uptime_pct is not none %}
+            <span class="badge {% if observed.uptime_pct >= 99 %}badge-green{% elif observed.uptime_pct >= 90 %}badge-warning{% else %}badge-red{% endif %}">
+              {{ "%.1f"|format(observed.uptime_pct) }}%
+            </span>
+            <div class="text-dim">{{ observed.sample_count }} samples while active</div>
+          {% else %}
+            <span class="text-dim">No active samples</span>
+          {% endif %}
+        </td>
         <td>
           {% if log %}
             <span class="badge {% if log.success %}badge-green{% else %}badge-red{% endif %}">{{ log.stage_reached }}</span>
@@ -121,6 +162,19 @@
   {% else %}
   <p class="text-dim">No nodes yet.</p>
   {% endif %}
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <h2>Problem Digest</h2>
+    <a href="/logs" class="btn btn-outline btn-sm">Full Logs →</a>
+  </div>
+  <div id="log-insights" hx-get="/api/log-insights?lines=500" hx-trigger="load" hx-swap="innerHTML">
+    <span class="text-dim">Loading…</span>
+  </div>
+  <p class="text-dim mt-md">
+    This groups recent sing-box connection and DNS errors. It does not prove remote server uptime.
+  </p>
 </div>
 
 <div class="card">

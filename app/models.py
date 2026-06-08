@@ -37,6 +37,7 @@ class HealthCheckLog(Base):
 
     id = Column(Integer, primary_key=True)
     checked_at = Column(DateTime, nullable=False, index=True)
+    node_tag = Column(String, nullable=True, index=True)
     check_name = Column(String, nullable=False)
     category = Column(String, nullable=False, default="connectivity")
     ok = Column(Boolean, nullable=False)

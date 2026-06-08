@@ -1,75 +1,70 @@
-# Engineering Backlog
+# Engineering Roadmap
 
-This file tracks practical work for the local sing-box manager. It separates
-implemented behavior from backlog ideas so documentation does not imply support
-for features that are not built.
+This file tracks practical engineering work. It separates shipped behavior,
+near-term milestones, and non-goals so the repo does not imply unsupported
+features.
 
-## Current State
+## Shipped State
 
-- Local FastAPI web UI for a personal sing-box client.
+- Local FastAPI web UI for a single Linux host running sing-box.
 - Node parsing for VLESS and Hysteria2/Hy2 URLs.
-- Config generation from stored node data plus DNS/route settings.
+- Config generation from stored node data plus DNS and route presets.
 - Deploy pipeline with validation, helper-based config replacement, restart,
-  lightweight service health check, backup, rollback, and deploy logs.
+  lightweight health check, backup, rollback, and deploy logs.
 - Profiles for node plus DNS/route preset combinations.
 - Optional password auth, signed cookies, CSRF checks, and login rate limiting.
 - Local diagnostics for logs, health checks, latency history, service status,
   external IP, and config diff.
 - Optional notifications through `notify-send`, Telegram, and ntfy.
 - Optional Telegram admin bot for local management commands.
-- Managed-user Telegram config delivery with config groups, selected nodes,
+- Managed-user Telegram delivery of raw proxy URLs with groups, selected nodes,
   config versions, fingerprints, refresh limits, and delivery logs.
 - Unit/page tests and Playwright e2e smoke tests with system calls mocked.
 
-## Near-Term Hardening
+## 1.3.2 Observability
 
-- Keep README short and move operational detail into focused docs.
-- Keep `make lint`, `make test`, and CI green after feature work.
-- Keep local quality gates reproducible through `make check-fast` and `make
-  check`; avoid duplicating command logic in CI.
-- Continue reducing route/service coupling where it gets in the way of tests.
-- Keep test DB isolation strict so local `singbox_manager.db` is not mutated.
-- Add regression tests when changing deploy, auth, Telegram, or user
-  distribution behavior.
-- Review docs after every feature pass for stale claims and unsupported
-  promises.
+- Attach the active node tag to new background health samples.
+- Show dashboard-level tunnel health for 24h and 7d.
+- Show per-node observed health only for periods when that node was active.
+- Add a dashboard problem digest that groups recent sing-box connection and DNS
+  errors by outbound, target, and reason.
+- Keep raw logs and detailed latency charts on Logs/Diagnostics pages.
+- Document that observed tunnel health is not remote server uptime.
 
-## User Distribution Follow-Ups
+## 1.4 Managed Client Configs
 
-- Separate personal/admin nodes from user-visible nodes if shared use grows.
-- Add clearer UI filters for delivery log review.
-- Add export of config delivery logs for manual audit.
-- Add per-group/user expiry fields only if there is a concrete use case.
-- Support QR or file exports only for specific client formats that can be
-  tested.
+- Replace or complement raw URL delivery with generated sing-box client config
+  delivery for managed users.
+- Let groups choose route presets for generated client configs.
+- Add a client-facing export format only after selecting a concrete target
+  client and testing import behavior.
+- Keep raw URL delivery available until generated config delivery is proven
+  usable for the target devices.
 
-## Operations Follow-Ups
+## 1.5 Operations Hardening
 
-- Add a small disaster-recovery export containing DB dump instructions,
-  `.env.example`, rendered service/sudoers examples, and current generated
-  config metadata.
-- Improve backup restore documentation for manual recovery after rollback
-  failure.
-- Add a simple smoke command that validates helper install, sudoers, sing-box
-  binary path, and systemd service state without modifying config.
+- Add a smoke command for helper install, sudoers, sing-box binary, and systemd
+  service state without modifying deployed config.
+- Add disaster-recovery export notes for DB dump, `.env.example`, rendered
+  service/sudoers examples, and current generated config metadata.
+- Improve manual restore documentation for rollback failure cases.
+- Continue splitting broad tests or service modules only when feature work makes
+  the current shape harder to maintain.
 
-## Non-Goals For Now
+## Non-Goals
 
 - Hosted multi-tenant control plane.
-- General server fleet management.
+- General remote server fleet management.
 - Server-side bandwidth accounting or traffic enforcement.
 - Device binding.
 - Reliable remote kill-switch for distributed client configs.
 - MTProto server inventory or rotation.
-- Claims that Telegram config delivery controls actual VPN usage.
+- Claims that Telegram raw URL delivery controls actual VPN usage.
 
-## Audit Follow-Ups
+## Maintenance Rules
 
-- Revisit `app/services/users.py` if user distribution gains more behavior.
-- Split broad tests into focused modules when they next need substantial edits.
-- Replace import-time global test patches with fixture-scoped patches where it
-  improves readability without weakening DB/system-call isolation.
-- Consider moving dev/test tools into separate requirements if production
-  packaging becomes a concern.
-- Keep comments focused on constraints and edge cases; avoid comments that
-  restate simple code.
+- Keep `make lint`, `make test`, and CI green after feature work.
+- Add regression tests when changing deploy, auth, Telegram, routing, or user
+  distribution behavior.
+- Keep test DB isolation strict so local `singbox_manager.db` is not mutated.
+- Review docs after feature work for stale claims and unsupported promises.

@@ -4,6 +4,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Optional
 
 from alembic import command as alembic_command
 from alembic.config import Config as AlembicConfig
@@ -16,7 +17,7 @@ from app.config import settings as app_settings
 from app.db import SessionLocal
 from app.health import HealthReport, run_health_checks
 from app.logging_config import get_logger, setup_logging
-from app.models import HealthCheckLog
+from app.models import HealthCheckLog, Node
 from app.routes import dashboard, logs, nodes, profiles, settings, system, users
 from app.telegram_admin import create_bot_from_env
 from app.version import VERSION
@@ -40,6 +41,7 @@ async def _health_check_loop() -> None:
     await asyncio.sleep(15)
     while True:
         try:
+            active_node_tag = _current_active_node_tag()
             report = await run_health_checks()
             now = datetime.utcnow()
             cutoff = now - timedelta(days=_HEALTH_RETAIN_DAYS)
@@ -48,6 +50,7 @@ async def _health_check_loop() -> None:
                 for check in report.checks:
                     db.add(HealthCheckLog(
                         checked_at=now,
+                        node_tag=active_node_tag,
                         check_name=check.name,
                         category=check.category,
                         ok=check.ok,
@@ -64,6 +67,19 @@ async def _health_check_loop() -> None:
         except Exception as e:
             _log.warning("Health check loop error: %s", e, exc_info=True)
         await asyncio.sleep(_HEALTH_CHECK_INTERVAL)
+
+
+def _current_active_node_tag() -> Optional[str]:
+    db = SessionLocal()
+    try:
+        return _active_node_tag(db)
+    finally:
+        db.close()
+
+
+def _active_node_tag(db) -> Optional[str]:
+    node = db.query(Node).filter(Node.active.is_(True)).first()
+    return node.tag if node else None
 
 
 def _notify_health_change(prev: str, current: str, report: HealthReport) -> None:

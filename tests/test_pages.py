@@ -105,6 +105,21 @@ def test_health_and_version_probes(client):
     assert response.json()["app"]
 
 
+def test_log_insights_endpoint_groups_recent_problems(client):
+    log_text = (
+        "2026-06-07T00:42:13+03:00 host sing-box[1]: ERROR [1 4.5s] "
+        "connection: open connection to 91.105.192.100:80 "
+        "using outbound/hysteria2[hy kz]: timeout: no recent network activity"
+    )
+    with patch("app.singbox.service.get_logs", return_value=log_text):
+        response = client.get("/api/log-insights")
+
+    assert response.status_code == 200
+    assert b"hysteria2" in response.content
+    assert b"hy kz" in response.content
+    assert b"no recent network activity" in response.content
+
+
 def test_users_create_group_and_user(client):
     suffix = uuid.uuid4().hex[:8]
     node_tag = _ensure_node(

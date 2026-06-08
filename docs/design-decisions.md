@@ -97,6 +97,17 @@ Reason:
 Limits are refresh/delivery limits, not traffic controls. They reduce spam and
 accidental repeated delivery; they do not prevent actual network usage.
 
+## Routing Presets And Client Enforcement
+
+Route presets are generated into the sing-box config deployed on the managed
+host. They can send selected destinations direct or through the active outbound
+for that host.
+
+They do not control clients that imported a raw VLESS/Hysteria2 URL. Once a raw
+URL is delivered, routing behavior belongs to the user's client application.
+Changing this requires distributing full client configs with route presets,
+not only proxy URLs.
+
 ## Current Trust Boundaries
 
 Trusted:

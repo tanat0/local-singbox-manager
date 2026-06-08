@@ -59,13 +59,17 @@ Route presets:
 The `bypass_ru` preset references remote SagerNet `.srs` rule sets. sing-box
 downloads and refreshes them; the app does not keep a local geo database.
 
+These presets apply to the generated config deployed on the managed host. They
+do not affect managed users who currently receive raw proxy URLs through
+Telegram.
+
 Generated configs default to `log.level: warn`. Use `info` or `debug` only for
 diagnostics and re-activate a node after changing the setting.
 
 ## Logs And Diagnostics
 
-- Dashboard shows service state, active node/profile, recent problems, external
-  IP, and config diff.
+- Dashboard shows service state, active node/profile, external IP, observed
+  tunnel health, recent problem digest, node metadata, and config diff.
 - Logs page can show all logs, warnings/errors, fatal/error, and text grep.
 - Diagnostics page runs live checks and shows recent latency history from the
   SQLite health log.
@@ -79,13 +83,15 @@ Health checks:
 - HTTPS request to `https://www.google.com`
 - external IP through ipify, ifconfig.me, then ipinfo.io
 
-Background health checks keep 7 days of data.
+Background health checks keep 7 days of data. New samples include the active
+node tag at the time of the check. This is observed tunnel health while a node
+was active, not a remote server uptime guarantee.
 
 Inspect recent checks:
 
 ```bash
 sqlite3 singbox_manager.db \
-  "SELECT checked_at, check_name, ok, latency_ms FROM health_check_log ORDER BY id DESC LIMIT 20;"
+  "SELECT checked_at, node_tag, check_name, ok, latency_ms FROM health_check_log ORDER BY id DESC LIMIT 20;"
 ```
 
 ## Backups

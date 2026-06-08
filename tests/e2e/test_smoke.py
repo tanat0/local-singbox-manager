@@ -329,8 +329,11 @@ def test_import_nodes_round_trip_no_duplicates(page: Page, base_url: str):
 
 
 def test_add_duplicate_node_shows_updated(page: Page, base_url: str):
-    # smoke-hy2 is the active node at this point (smoke-vless was deleted).
-    # Re-submitting the same URL should update rather than create.
+    page.goto(base_url + "/nodes")
+    page.fill("textarea[name='url']", HY2_URL)
+    page.click("button[type='submit']")
+    expect(page.locator(".alert-success")).to_be_visible()
+
     page.goto(base_url + "/nodes")
     page.fill("textarea[name='url']", HY2_URL)
     page.click("button[type='submit']")
