@@ -217,6 +217,9 @@ systemd files are templates rendered by `scripts/install-systemd.sh`. Local
 database files, virtualenvs, caches, and `.env` files are ignored by git.
 Changelog entries live in [CHANGELOG.md](CHANGELOG.md).
 
+For focused contribution notes, see [CONTRIBUTING.md](CONTRIBUTING.md). For the
+local security boundary and reporting notes, see [SECURITY.md](SECURITY.md).
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
