@@ -63,6 +63,18 @@ These presets apply to the generated config deployed on the managed host. They
 do not affect managed users who currently receive raw proxy URLs through
 Telegram.
 
+Generated configs also include always-on route guards after DNS hijack and
+before preset-specific rules:
+
+- `api.oneme.ru` and `calls.okcdn.ru` use the `block` outbound
+- `ifconfig.me`, `api.ipify.org`, `checkip.amazonaws.com`, `icanhazip.com`,
+  and `wtfismyip.com` use the `block` outbound
+- `.ru`, `.su`, and `gosuslugi.ru` use the `direct` outbound
+
+This is local routing policy for the generated TUN config. It is not
+server-side enforcement and it does not affect clients that imported a raw
+proxy URL.
+
 Generated configs default to `log.level: warn`. Use `info` or `debug` only for
 diagnostics and re-activate a node after changing the setting.
 
@@ -81,7 +93,7 @@ Health checks:
 - DNS resolve for `google.com`
 - TCP connect to `1.1.1.1:80`
 - HTTPS request to `https://www.google.com`
-- external IP through ipify, ifconfig.me, then ipinfo.io
+- external IP through ipinfo.io, then ipify and ifconfig.me as fallbacks
 
 Background health checks keep 7 days of data. New samples include the active
 node tag at the time of the check. This is observed tunnel health while a node

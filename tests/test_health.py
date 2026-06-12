@@ -13,6 +13,7 @@ import pytest
 from app.health import (
     CheckResult,
     HealthReport,
+    check_external_ip,
     check_service,
     check_tun_interface,
     run_health_checks,
@@ -116,6 +117,36 @@ async def test_check_tun_not_found():
         result = await check_tun_interface()
     assert result.ok is False
     assert "not found" in result.detail
+
+
+@pytest.mark.asyncio
+async def test_check_external_ip_prefers_unblocked_provider():
+    requested_urls = []
+
+    class _ExternalIpResponse:
+        status_code = 200
+        text = "203.0.113.10\n"
+
+    class _ExternalIpClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def get(self, url):
+            requested_urls.append(url)
+            return _ExternalIpResponse()
+
+    with patch("app.health.httpx.AsyncClient", _ExternalIpClient):
+        ip, err = await check_external_ip()
+
+    assert ip == "203.0.113.10"
+    assert err == ""
+    assert requested_urls == ["https://ipinfo.io/ip"]
 
 
 # ── run_health_checks — overall calculation ──────────────────────────────────

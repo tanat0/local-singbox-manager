@@ -145,9 +145,9 @@ async def check_https(url: str = "https://www.google.com") -> CheckResult:
 # ── External IP ──────────────────────────────────────────────────────────────
 
 _IP_PROVIDERS = [
+    "https://ipinfo.io/ip",
     "https://api.ipify.org",
     "https://ifconfig.me/ip",
-    "https://ipinfo.io/ip",
 ]
 
 

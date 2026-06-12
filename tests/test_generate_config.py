@@ -74,12 +74,68 @@ def test_tun_inbound():
     assert tun is not None
     assert tun["auto_route"] is True
     assert tun["stack"] == "gvisor"
+    assert {i["type"] for i in cfg["inbounds"]} == {"tun"}
 
 
 def test_dns_hijack_rule():
     cfg = generate_config(parse_vless(VLESS_URL))
-    rule = next((r for r in cfg["route"]["rules"] if r.get("action") == "hijack-dns"), None)
-    assert rule is not None and rule["port"] == 53
+    assert cfg["route"]["rules"][0] == {"port": 53, "action": "hijack-dns"}
+
+
+def test_route_guards_block_telemetry_domains():
+    cfg = generate_config(parse_vless(VLESS_URL))
+    rule = next(
+        (
+            r for r in cfg["route"]["rules"]
+            if r.get("outbound") == "block" and "api.oneme.ru" in r.get("domain", [])
+        ),
+        None,
+    )
+    assert rule is not None
+    assert "calls.okcdn.ru" in rule["domain"]
+
+
+def test_route_guards_block_ip_checker_domains():
+    cfg = generate_config(parse_vless(VLESS_URL))
+    rule = next(
+        (
+            r for r in cfg["route"]["rules"]
+            if r.get("outbound") == "block" and "api.ipify.org" in r.get("domain", [])
+        ),
+        None,
+    )
+    assert rule is not None
+    assert "ifconfig.me" in rule["domain"]
+    assert "checkip.amazonaws.com" in rule["domain"]
+    assert "icanhazip.com" in rule["domain"]
+    assert "wtfismyip.com" in rule["domain"]
+
+
+def test_route_guards_direct_ru_domains():
+    cfg = generate_config(parse_vless(VLESS_URL))
+    rule = next(
+        (
+            r for r in cfg["route"]["rules"]
+            if r.get("outbound") == "direct" and "gosuslugi.ru" in r.get("domain", [])
+        ),
+        None,
+    )
+    assert rule is not None
+    assert rule["domain_suffix"] == [".ru", ".su"]
+
+
+def test_route_guards_precede_preset_specific_rules():
+    cfg = generate_config(parse_vless(VLESS_URL), route_preset="bypass_lan")
+    rules = cfg["route"]["rules"]
+    ru_guard_index = next(
+        i for i, rule in enumerate(rules)
+        if "gosuslugi.ru" in rule.get("domain", [])
+    )
+    private_rule_index = next(
+        i for i, rule in enumerate(rules)
+        if rule.get("ip_is_private")
+    )
+    assert ru_guard_index < private_rule_index
 
 
 def test_base_not_mutated():

@@ -108,6 +108,23 @@ URL is delivered, routing behavior belongs to the user's client application.
 Changing this requires distributing full client configs with route presets,
 not only proxy URLs.
 
+## Always-On Route Guards
+
+Generated TUN configs include a small hardcoded routing policy for this local
+host: selected reporting and IP-checker domains go to the `block` outbound, and
+basic RU destinations go to the `direct` outbound.
+
+Reason:
+
+- the policy is part of the local operator's expected baseline, not a per-user
+  feature
+- a hardcoded list is easier to review than an early rule editor
+- putting the rules before presets keeps them consistent across route modes
+
+This can break applications that rely on the blocked IP-checker endpoints. It
+is not server-side enforcement and it is not a guarantee that other software
+cannot infer routing state by other means.
+
 ## Current Trust Boundaries
 
 Trusted:

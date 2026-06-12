@@ -9,6 +9,8 @@ features.
 - Local FastAPI web UI for a single Linux host running sing-box.
 - Node parsing for VLESS and Hysteria2/Hy2 URLs.
 - Config generation from stored node data plus DNS and route presets.
+- Always-on route guards for generated TUN configs: selected domains are
+  blocked and basic RU destinations go direct.
 - Deploy pipeline with validation, helper-based config replacement, restart,
   lightweight health check, backup, rollback, and deploy logs.
 - Profiles for node plus DNS/route preset combinations.
@@ -38,6 +40,8 @@ features.
 - Let groups choose route presets for generated client configs.
 - Add a client-facing export format only after selecting a concrete target
   client and testing import behavior.
+- Decide whether route guards should become configurable only after generated
+  client configs have a clear UX and import path.
 - Keep raw URL delivery available until generated config delivery is proven
   usable for the target devices.
 

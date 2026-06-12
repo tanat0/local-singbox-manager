@@ -8,7 +8,7 @@ from app.parsers.base import ParsedNode
 from app.parsers.hysteria2 import Hysteria2Node
 from app.parsers.vless import VlessNode
 from app.singbox.dns import DEFAULT_DNS_PRESET, DNS_PRESETS
-from app.singbox.routes import DEFAULT_ROUTE_PRESET, ROUTE_PRESETS
+from app.singbox.routes import DEFAULT_ROUTE_PRESET, ROUTE_PRESETS, build_route_config
 
 _TUN_INBOUND: dict[str, Any] = {
     "type": "tun",
@@ -107,7 +107,7 @@ def generate_config(
 
     active = build_outbound(node)
 
-    route = copy.deepcopy(ROUTE_PRESETS[route_preset]["route"])
+    route = build_route_config(route_preset)
     route["final"] = active["tag"]
 
     if log_level not in {"error", "warn", "info", "debug"}:
