@@ -4,13 +4,15 @@ from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 from app.db import Base, SessionLocal, engine
-from app.models import ConfigDeliveryLog
+from app.models import ConfigDeliveryLog, ConfigGroup, ManagedUser, Node
 from app.services.distribution import (
     UserAssignment,
     config_fingerprint,
     effective_refresh_limit,
+    get_user_assignment,
     refresh_limit_exceeded,
 )
+from app.services.node_tags import encode_node_tags
 from app.telegram.presenters import format_user_configs, format_user_status
 
 
@@ -20,6 +22,7 @@ def test_format_user_status_shows_assignment():
         group=SimpleNamespace(name="family"),
         nodes=[SimpleNamespace(), SimpleNamespace()],
         config_version=3,
+        route_preset="bypass_lan",
         config_fingerprint="abcdef1234567890",
     )
 
@@ -29,6 +32,7 @@ def test_format_user_status_shows_assignment():
     assert "family" in text
     assert "2" in text
     assert "3" in text
+    assert "bypass_lan" in text
     assert "abcdef123456" in text
 
 
@@ -41,6 +45,7 @@ def test_format_user_configs_includes_raw_urls():
             SimpleNamespace(tag="node-b", protocol="hysteria2", raw_url="hysteria2://node-b"),
         ],
         config_version=2,
+        route_preset="bypass_ru",
         config_fingerprint="b" * 64,
     )
 
@@ -48,6 +53,8 @@ def test_format_user_configs_includes_raw_urls():
 
     assert "Config group: family" in text
     assert "Version: 2" in text
+    assert "Route preset: bypass_ru" in text
+    assert "Generated sing-box config is attached." in text
     assert "bbbbbbbbbbbb" in text
     assert "vless://node-a" in text
     assert "hysteria2://node-b" in text
@@ -72,6 +79,7 @@ def test_config_fingerprint_is_stable_and_content_based():
 
     assert config_fingerprint(nodes_a) == config_fingerprint(nodes_b)
     assert config_fingerprint(nodes_a) != config_fingerprint(nodes_changed)
+    assert config_fingerprint(nodes_a, "full_tunnel") != config_fingerprint(nodes_a, "bypass_lan")
 
 
 def test_effective_refresh_limit_prefers_user_then_group_then_default():
@@ -124,5 +132,45 @@ def test_refresh_limit_counts_recent_config_and_refresh_attempts():
         assert refresh_limit_exceeded(db, assignment, now=now)
     finally:
         db.query(ConfigDeliveryLog).delete()
+        db.commit()
+        db.close()
+
+
+def test_get_user_assignment_fails_when_some_assigned_nodes_are_missing():
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        db.query(ConfigDeliveryLog).delete()
+        db.query(ManagedUser).delete()
+        db.query(ConfigGroup).delete()
+        db.query(Node).delete()
+        group = ConfigGroup(
+            name="family",
+            enabled=True,
+            node_tags_json=encode_node_tags(["node-a", "missing-node"]),
+        )
+        db.add(group)
+        db.flush()
+        db.add(Node(
+            tag="node-a",
+            protocol="vless",
+            raw_url="vless://node-a",
+            parsed_json="{}",
+            schema_version=1,
+        ))
+        db.add(ManagedUser(telegram_id="123", enabled=True, config_group_id=group.id))
+        db.commit()
+
+        assignment = get_user_assignment(db, "123")
+
+        assert assignment.error == "Some assigned nodes were not found."
+        assert assignment.user is not None
+        assert assignment.group is not None
+        assert [node.tag for node in assignment.nodes] == ["node-a"]
+    finally:
+        db.query(ConfigDeliveryLog).delete()
+        db.query(ManagedUser).delete()
+        db.query(ConfigGroup).delete()
+        db.query(Node).delete()
         db.commit()
         db.close()

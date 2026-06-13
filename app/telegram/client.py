@@ -12,6 +12,20 @@ class TelegramApiClient:
     async def _post(self, method: str, payload: Dict[str, Any], timeout: float = 10.0) -> Dict[str, Any]:
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.post(f"{self._base_url}/{method}", json=payload)
+        return self._parse_response(method, response)
+
+    async def _post_multipart(
+        self,
+        method: str,
+        data: Dict[str, Any],
+        files: Dict[str, Any],
+        timeout: float = 30.0,
+    ) -> Dict[str, Any]:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.post(f"{self._base_url}/{method}", data=data, files=files)
+        return self._parse_response(method, response)
+
+    def _parse_response(self, method: str, response: httpx.Response) -> Dict[str, Any]:
         response.raise_for_status()
         data = response.json()
         if not data.get("ok"):
@@ -39,3 +53,20 @@ class TelegramApiClient:
         chunks = [text[i:i + 3900] for i in range(0, len(text), 3900)] or [""]
         for chunk in chunks:
             await self._post("sendMessage", {"chat_id": chat_id, "text": chunk})
+
+    async def send_document(
+        self,
+        chat_id: int,
+        filename: str,
+        content: bytes,
+        mime_type: str,
+        caption: str = "",
+    ) -> None:
+        payload: Dict[str, Any] = {"chat_id": chat_id}
+        if caption:
+            payload["caption"] = caption[:1024]
+        await self._post_multipart(
+            "sendDocument",
+            payload,
+            {"document": (filename, content, mime_type)},
+        )

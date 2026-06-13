@@ -75,6 +75,7 @@ def format_user_status(assignment: UserAssignment) -> str:
         f"Group: {group.name if group else '-'}\n"
         f"Assigned configs: {len(assignment.nodes)}\n"
         f"Config version: {assignment.config_version or '-'}\n"
+        f"Route preset: {assignment.route_preset}\n"
         f"Fingerprint: {assignment.config_fingerprint[:12] or '-'}"
     )
 
@@ -86,8 +87,10 @@ def format_user_configs(assignment: UserAssignment) -> str:
     lines = [
         f"Config group: {group.name if group else '-'}",
         f"Version: {assignment.config_version or '-'}",
+        f"Route preset: {assignment.route_preset}",
         f"Fingerprint: {assignment.config_fingerprint[:12] or '-'}",
-        "Import one of these links in a compatible client:",
+        "Generated sing-box config is attached.",
+        "Raw proxy links remain below as fallback:",
         "",
     ]
     for node in assignment.nodes:

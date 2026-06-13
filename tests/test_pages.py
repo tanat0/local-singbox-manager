@@ -133,6 +133,7 @@ def test_users_create_group_and_user(client):
         "name": group_name,
         "description": "Family configs",
         "node_tags": [node_tag],
+        "route_preset": "bypass_lan",
         "refresh_limit_per_hour": "3",
         "notes": "limited access",
         "enabled": "on",
@@ -141,6 +142,7 @@ def test_users_create_group_and_user(client):
     assert b"Created group" in group_resp.content
     assert group_name.encode() in group_resp.content
     assert node_tag.encode() in group_resp.content
+    assert b"Bypass LAN" in group_resp.content
 
     user_resp = client.post("/users", data={
         "telegram_id": telegram_id,
@@ -164,6 +166,17 @@ def test_users_reject_unknown_group_node_tag(client):
 
     assert response.status_code == 200
     assert b"Unknown node tag" in response.content
+
+
+def test_users_reject_invalid_group_route_preset(client):
+    response = client.post("/users/groups", data={
+        "name": f"bad-route-{uuid.uuid4().hex[:8]}",
+        "route_preset": "missing",
+        "enabled": "on",
+    }, follow_redirects=True)
+
+    assert response.status_code == 200
+    assert b"Invalid route preset" in response.content
 
 
 def test_users_page_shows_delivery_log(client):

@@ -8,19 +8,8 @@ from app.parsers.base import ParsedNode
 from app.parsers.hysteria2 import Hysteria2Node
 from app.parsers.vless import VlessNode
 from app.singbox.dns import DEFAULT_DNS_PRESET, DNS_PRESETS
+from app.singbox.inbounds import build_tun_inbound
 from app.singbox.routes import DEFAULT_ROUTE_PRESET, ROUTE_PRESETS, build_route_config
-
-_TUN_INBOUND: dict[str, Any] = {
-    "type": "tun",
-    "tag": "tun-in",
-    "interface_name": "singtun0",
-    "address": ["172.19.0.1/30"],
-    "mtu": 1500,
-    "auto_route": True,
-    "strict_route": True,
-    "auto_redirect": True,
-    "stack": "gvisor",
-}
 
 
 def _build_vless_outbound(node: VlessNode) -> dict[str, Any]:
@@ -116,7 +105,7 @@ def generate_config(
     return {
         "log": {"level": log_level, "timestamp": True},
         "dns": copy.deepcopy(DNS_PRESETS[dns_preset]["config"]),
-        "inbounds": [copy.deepcopy(_TUN_INBOUND)],
+        "inbounds": [build_tun_inbound()],
         "route": route,
         "outbounds": [
             active,

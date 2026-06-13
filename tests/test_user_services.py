@@ -64,6 +64,38 @@ def test_create_group_rejects_unknown_node_tag():
         db.close()
 
 
+def test_create_group_rejects_invalid_route_preset():
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        _reset_user_tables(db)
+        result = create_group(db, ConfigGroupInput(name="family", route_preset="missing"))
+
+        assert result.ok is False
+        assert "Invalid route preset" in result.message
+        assert db.query(ConfigGroup).count() == 0
+    finally:
+        _reset_user_tables(db)
+        db.close()
+
+
+def test_create_group_rejects_reserved_node_tag_for_client_config():
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        _reset_user_tables(db)
+        _add_node(db, "direct")
+        db.commit()
+
+        result = create_group(db, ConfigGroupInput(name="family", node_tags=["direct"]))
+
+        assert result.ok is False
+        assert "Reserved node tag" in result.message
+    finally:
+        _reset_user_tables(db)
+        db.close()
+
+
 def test_update_group_increments_version_and_logs_notification_failure():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
@@ -80,7 +112,7 @@ def test_update_group_increments_version_and_logs_notification_failure():
         result = asyncio.run(update_group(
             db,
             group.id,
-            ConfigGroupInput(name="family", node_tags=["node-b"], enabled=True),
+            ConfigGroupInput(name="family", node_tags=["node-b"], route_preset="bypass_lan", enabled=True),
         ))
 
         db.refresh(group)
@@ -88,10 +120,47 @@ def test_update_group_increments_version_and_logs_notification_failure():
         assert result.ok is True
         assert group.config_version == 2
         assert decode_node_tags(group.node_tags_json) == ["node-b"]
+        assert group.route_preset == "bypass_lan"
         assert log is not None
         assert log.success is False
         assert log.config_version == 2
         assert log.config_fingerprint
+    finally:
+        _reset_user_tables(db)
+        db.close()
+
+
+def test_update_group_does_not_increment_version_for_notes_only_change():
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        _reset_user_tables(db)
+        _add_node(db, "node-a")
+        group = ConfigGroup(
+            name="family",
+            enabled=True,
+            node_tags_json=encode_node_tags(["node-a"]),
+            route_preset="full_tunnel",
+        )
+        db.add(group)
+        db.commit()
+
+        result = asyncio.run(update_group(
+            db,
+            group.id,
+            ConfigGroupInput(
+                name="family",
+                node_tags=["node-a"],
+                route_preset="full_tunnel",
+                notes="updated notes",
+                enabled=True,
+            ),
+        ))
+
+        db.refresh(group)
+        assert result.ok is True
+        assert group.config_version == 1
+        assert group.notes == "updated notes"
     finally:
         _reset_user_tables(db)
         db.close()

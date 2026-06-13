@@ -26,9 +26,18 @@ class ParsedCommand:
 
 
 @dataclass(frozen=True)
+class TelegramDocument:
+    filename: str
+    content: bytes
+    mime_type: str
+    caption: str = ""
+
+
+@dataclass(frozen=True)
 class BotResponse:
     ok: bool
     text: str
+    document: Optional[TelegramDocument] = None
 
 
 def _extract_int(raw: Dict[str, Any], key: str) -> Optional[int]:

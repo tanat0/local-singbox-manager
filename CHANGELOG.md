@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - User distribution hardening: selectable node assignments, config versions,
   deterministic fingerprints, refresh limits, delivery log visibility, and
   best-effort Telegram notifications when assigned configs change.
+- Managed-user delivery can now attach generated sing-box JSON configs through
+  Telegram while keeping raw proxy URLs as fallback.
 - Local quality gates: check-only git hooks, `make check-fast`, `make check`,
   and `make doctor`.
 

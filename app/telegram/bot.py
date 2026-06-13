@@ -10,7 +10,7 @@ from app.logging_config import get_logger
 from app.telegram.client import TelegramApiClient
 from app.telegram.dispatcher import TelegramDispatcher
 from app.telegram.handlers import AdminCommandHandler, AdminHandlerDeps, UserCommandHandler, UserHandlerDeps
-from app.telegram.types import TelegramMessage, command_parts  # noqa: F401
+from app.telegram.types import BotResponse, TelegramDocument, TelegramMessage, command_parts  # noqa: F401
 
 _log = get_logger(__name__)
 _POLL_TIMEOUT = 25
@@ -49,7 +49,8 @@ def build_dispatcher(admin_ids: Set[int]) -> TelegramDispatcher:
 
 
 async def handle_message(message: dict, admin_ids: Set[int]) -> Optional[str]:
-    return await build_dispatcher(admin_ids).handle(TelegramMessage.from_api_message(message))
+    response = await build_dispatcher(admin_ids).handle(TelegramMessage.from_api_message(message))
+    return response.text if response else None
 
 
 class TelegramBotRunner:
@@ -67,6 +68,15 @@ class TelegramBotRunner:
     async def send_message(self, chat_id: int, text: str) -> None:
         await self._client.send_message(chat_id, text)
 
+    async def send_document(self, chat_id: int, document: TelegramDocument) -> None:
+        await self._client.send_document(
+            chat_id,
+            document.filename,
+            document.content,
+            document.mime_type,
+            caption=document.caption,
+        )
+
     async def poll_once(self) -> None:
         updates = await self._client.get_updates(self.offset, self._poll_timeout, ["message"])
         for update in updates:
@@ -77,7 +87,16 @@ class TelegramBotRunner:
                 continue
             response = await self._dispatcher.handle(tg_message)
             if response:
-                await self.send_message(tg_message.chat_id, response)
+                await self._send_response(tg_message.chat_id, response)
+
+    async def _send_response(self, chat_id: int, response: BotResponse) -> None:
+        if response.text:
+            await self.send_message(chat_id, response.text)
+        if response.document:
+            try:
+                await self.send_document(chat_id, response.document)
+            except Exception as exc:
+                _log.warning("Telegram document delivery failed for chat %s: %s", chat_id, exc)
 
     async def run_forever(self) -> None:
         _log.info("Telegram bot polling started")

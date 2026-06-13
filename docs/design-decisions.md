@@ -85,13 +85,15 @@ the requested command itself failed.
 
 ## User Config Distribution
 
-Managed users receive raw proxy URLs through Telegram commands. Groups select
-existing nodes and carry a config version plus deterministic fingerprint.
+Managed users receive generated sing-box JSON configs through Telegram
+commands. The same response still includes raw proxy URLs as a fallback while
+real client import behavior is being tested.
 
 Reason:
 
 - raw URLs are the format already stored by the app
-- different clients have different import mechanisms
+- generic sing-box JSON is the smallest concrete client config target
+- different graphical clients have different import behavior
 - server-side enforcement is not available in the local client manager
 
 Limits are refresh/delivery limits, not traffic controls. They reduce spam and
@@ -103,10 +105,10 @@ Route presets are generated into the sing-box config deployed on the managed
 host. They can send selected destinations direct or through the active outbound
 for that host.
 
-They do not control clients that imported a raw VLESS/Hysteria2 URL. Once a raw
-URL is delivered, routing behavior belongs to the user's client application.
-Changing this requires distributing full client configs with route presets,
-not only proxy URLs.
+They do not control clients that imported only a raw VLESS/Hysteria2 URL. The
+generated client config carries route presets and route guards, but applying it
+still depends on the user's client importing and using that file. This is
+client-side configuration distribution, not server-side enforcement.
 
 ## Always-On Route Guards
 

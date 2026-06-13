@@ -9,6 +9,8 @@ from app.config import settings
 from app.models import ConfigDeliveryLog, ConfigGroup, ManagedUser, Node
 from app.repositories import UserRepository
 from app.services.node_tags import decode_node_tags, encode_node_tags, parse_node_tags
+from app.singbox.client_generator import RESERVED_CLIENT_OUTBOUND_TAGS
+from app.singbox.routes import DEFAULT_ROUTE_PRESET, ROUTE_PRESETS
 from app.telegram.client import TelegramApiClient
 
 
@@ -23,6 +25,7 @@ class ConfigGroupInput:
     name: str
     description: str = ""
     node_tags: Optional[List[str]] = None
+    route_preset: str = DEFAULT_ROUTE_PRESET
     refresh_limit_per_hour: str = ""
     notes: str = ""
     enabled: bool = False
@@ -44,6 +47,7 @@ class UsersPageData:
     users: List[ManagedUser]
     nodes: List[Node]
     deliveries: List["DeliveryLogView"]
+    route_presets: dict
 
 
 @dataclass(frozen=True)
@@ -70,6 +74,7 @@ def users_page_data(db: Session) -> UsersPageData:
             _delivery_view(row, group_names)
             for row in repo.list_recent_deliveries()
         ],
+        route_presets=ROUTE_PRESETS,
     )
 
 
@@ -83,6 +88,9 @@ def create_group(db: Session, form: ConfigGroupInput) -> MutationResult:
     node_tags_result = _validated_node_tags(db, form.node_tags or [])
     if not node_tags_result.ok:
         return MutationResult(False, node_tags_result.message)
+    route_preset = _validated_route_preset(form.route_preset)
+    if route_preset is None:
+        return MutationResult(False, "Invalid route preset")
     limit_result = _parse_optional_positive_int(form.refresh_limit_per_hour, "Group refresh limit")
     if not limit_result.ok:
         return MutationResult(False, limit_result.message)
@@ -91,6 +99,7 @@ def create_group(db: Session, form: ConfigGroupInput) -> MutationResult:
         name=name,
         description=form.description.strip() or None,
         node_tags_json=encode_node_tags(node_tags_result.tags),
+        route_preset=route_preset,
         refresh_limit_per_hour=limit_result.value,
         notes=form.notes.strip() or None,
         enabled=form.enabled,
@@ -113,22 +122,27 @@ async def update_group(db: Session, group_id: int, form: ConfigGroupInput) -> Mu
     node_tags_result = _validated_node_tags(db, form.node_tags or [])
     if not node_tags_result.ok:
         return MutationResult(False, node_tags_result.message)
+    route_preset = _validated_route_preset(form.route_preset)
+    if route_preset is None:
+        return MutationResult(False, "Invalid route preset")
     limit_result = _parse_optional_positive_int(form.refresh_limit_per_hour, "Group refresh limit")
     if not limit_result.ok:
         return MutationResult(False, limit_result.message)
 
     previous_tags = decode_node_tags(group.node_tags_json)
     nodes_changed = set(previous_tags) != set(node_tags_result.tags)
+    route_changed = (group.route_preset or DEFAULT_ROUTE_PRESET) != route_preset
     group.name = name
     group.description = form.description.strip() or None
     group.node_tags_json = encode_node_tags(node_tags_result.tags)
+    group.route_preset = route_preset
     group.refresh_limit_per_hour = limit_result.value
     group.notes = form.notes.strip() or None
     group.enabled = form.enabled
-    if nodes_changed:
+    if nodes_changed or route_changed:
         group.config_version = int(group.config_version or 1) + 1
     db.commit()
-    if nodes_changed and group.enabled:
+    if (nodes_changed or route_changed) and group.enabled:
         await notify_group_config_changed(db, group)
     return MutationResult(True, f"Updated group '{name}'")
 
@@ -220,7 +234,7 @@ async def notify_group_config_changed(db: Session, group: ConfigGroup) -> None:
         return
 
     nodes = db.query(Node).filter(Node.tag.in_(decode_node_tags(group.node_tags_json))).order_by(Node.tag).all()
-    fingerprint = config_fingerprint(nodes) if nodes else ""
+    fingerprint = config_fingerprint(nodes, group.route_preset or DEFAULT_ROUTE_PRESET) if nodes else ""
     message = (
         f"Assigned config changed for group '{group.name}'.\n"
         "Use /refresh to get the latest config."
@@ -277,7 +291,15 @@ def _validated_node_tags(db: Session, raw_tags: object) -> _NodeTagsResult:
     missing = [tag for tag in tags if tag not in existing]
     if missing:
         return _NodeTagsResult(False, [], f"Unknown node tag(s): {', '.join(missing[:5])}")
+    reserved = [tag for tag in tags if tag in RESERVED_CLIENT_OUTBOUND_TAGS]
+    if reserved:
+        return _NodeTagsResult(False, [], f"Reserved node tag(s): {', '.join(reserved[:5])}")
     return _NodeTagsResult(True, tags)
+
+
+def _validated_route_preset(raw: str) -> Optional[str]:
+    value = (raw or DEFAULT_ROUTE_PRESET).strip()
+    return value if value in ROUTE_PRESETS else None
 
 
 def _parse_optional_positive_int(raw: str, label: str) -> _LimitResult:

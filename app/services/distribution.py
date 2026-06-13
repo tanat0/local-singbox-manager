@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, List, Optional
 
 from app.services.node_tags import decode_node_tags
+from app.singbox.routes import DEFAULT_ROUTE_PRESET, ROUTE_PRESETS
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -22,6 +23,7 @@ class UserAssignment:
     error: str = ""
     config_version: Optional[int] = None
     config_fingerprint: str = ""
+    route_preset: str = DEFAULT_ROUTE_PRESET
     refresh_limit_per_hour: int = 10
 
 
@@ -54,21 +56,30 @@ def get_user_assignment(db: "Session", telegram_id: str) -> UserAssignment:
     nodes = db.query(Node).filter(Node.tag.in_(tags)).order_by(Node.tag).all()
     if not nodes:
         return UserAssignment(user, group, [], "Assigned nodes were not found.")
+    if len(nodes) != len(set(tags)):
+        return UserAssignment(user, group, nodes, "Some assigned nodes were not found.")
+    route_preset = group.route_preset or DEFAULT_ROUTE_PRESET
+    if route_preset not in ROUTE_PRESETS:
+        return UserAssignment(user, group, [], "Assigned config group has an invalid route preset.")
     return UserAssignment(
         user,
         group,
         nodes,
         config_version=group.config_version,
-        config_fingerprint=config_fingerprint(nodes),
+        config_fingerprint=config_fingerprint(nodes, route_preset),
+        route_preset=route_preset,
         refresh_limit_per_hour=effective_refresh_limit(user, group),
     )
 
 
-def config_fingerprint(nodes: List["Node"]) -> str:
-    payload = [
-        {"tag": node.tag, "protocol": node.protocol, "raw_url": node.raw_url}
-        for node in sorted(nodes, key=lambda item: item.tag)
-    ]
+def config_fingerprint(nodes: List["Node"], route_preset: str = DEFAULT_ROUTE_PRESET) -> str:
+    payload = {
+        "route_preset": route_preset,
+        "nodes": [
+            {"tag": node.tag, "protocol": node.protocol, "raw_url": node.raw_url}
+            for node in sorted(nodes, key=lambda item: item.tag)
+        ],
+    }
     raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 

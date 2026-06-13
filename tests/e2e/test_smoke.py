@@ -78,6 +78,11 @@ def test_diagnostics_page_loads(page: Page, base_url: str):
     expect(page).to_have_title("Diagnostics — Sing-Box Manager")
 
 
+def test_users_route_preset_selector_visible(page: Page, base_url: str):
+    page.goto(base_url + "/users")
+    expect(page.locator("select[name='route_preset']").first).to_be_visible()
+
+
 # ── Node management ──────────────────────────────────────────────────────────
 
 def test_add_vless_node(page: Page, base_url: str):

@@ -42,7 +42,8 @@ control plane, and no remote exposure by default.
 ### Small Trusted-User Workflow
 
 - Store managed Telegram users and groups.
-- Generate user-specific config links from selected nodes.
+- Generate user-specific sing-box config files and raw-link fallbacks from
+  selected nodes.
 - Send config updates through Telegram.
 - Track group versions, deterministic config fingerprints, delivery attempts,
   and refresh limits.
@@ -69,8 +70,8 @@ This project is not:
 ## Known Limitations
 
 - Proxy credentials are stored in plaintext in `singbox_manager.db`.
-- User distribution sends raw proxy URLs. It does not enforce actual VPN usage
-  server-side.
+- User distribution sends client-side config material. It does not enforce
+  actual VPN usage server-side.
 - Telegram notifications and desktop notifications are best effort.
 - Device binding, bandwidth accounting, server-side session control, MTProto,
   and multi-server management are not implemented.

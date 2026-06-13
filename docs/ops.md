@@ -59,9 +59,9 @@ Route presets:
 The `bypass_ru` preset references remote SagerNet `.srs` rule sets. sing-box
 downloads and refreshes them; the app does not keep a local geo database.
 
-These presets apply to the generated config deployed on the managed host. They
-do not affect managed users who currently receive raw proxy URLs through
-Telegram.
+Settings route presets apply to the generated config deployed on the managed
+host. Managed users use the client route preset selected on the Users page for
+their generated config files.
 
 Generated configs also include always-on route guards after DNS hijack and
 before preset-specific rules:
@@ -187,22 +187,32 @@ The Users page controls:
 
 - config groups
 - selected nodes per group
+- client route preset per group
 - group config version and refresh limit
 - managed user Telegram IDs
 - optional per-user refresh limit override
 - delivery log visibility
 
-`/config` and `/refresh` return raw proxy URLs for the assigned group with a
-version and fingerprint. The fingerprint is a sha256 hash over sorted
-`tag`, `protocol`, and `raw_url` values for the assigned nodes.
+`/config` and `/refresh` return a short summary, raw proxy URL fallback links,
+and a generated sing-box JSON config file. The file uses the group's route
+preset and includes the same always-on route guards as the locally deployed TUN
+config.
+
+When a group has multiple nodes, the generated file contains a sing-box
+`selector` outbound named `proxy`. The default selector target is the first
+assigned node after sorting by tag.
+
+The fingerprint is a sha256 hash over the group route preset plus sorted
+`tag`, `protocol`, and `raw_url` values for the assigned nodes. Generated config
+files contain proxy credentials and should be treated as sensitive.
 
 Refresh limits use a rolling one-hour window. User override wins over group
 limit; otherwise the default is 10 deliveries per hour. Blocked attempts are
 also logged.
 
-When an enabled group's node assignment changes, enabled users in that group
-receive a best-effort Telegram notification if a bot token is configured.
-Failures are written to `config_delivery_log`.
+When an enabled group's node assignment or client route preset changes, enabled
+users in that group receive a best-effort Telegram notification if a bot token
+is configured. Failures are written to `config_delivery_log`.
 
 ## Troubleshooting
 

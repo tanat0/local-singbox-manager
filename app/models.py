@@ -95,6 +95,7 @@ class ConfigGroup(Base):
     # JSON array of node tags. Empty means the group exists but has no configs assigned yet.
     node_tags_json = Column(Text, nullable=False, default="[]")
     config_version = Column(Integer, default=1, nullable=False)
+    route_preset = Column(String, nullable=False, default="full_tunnel")
     refresh_limit_per_hour = Column(Integer, nullable=True)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

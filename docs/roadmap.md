@@ -19,8 +19,9 @@ features.
   external IP, and config diff.
 - Optional notifications through `notify-send`, Telegram, and ntfy.
 - Optional Telegram admin bot for local management commands.
-- Managed-user Telegram delivery of raw proxy URLs with groups, selected nodes,
-  config versions, fingerprints, refresh limits, and delivery logs.
+- Managed-user Telegram delivery of generated sing-box JSON configs plus raw
+  proxy URL fallbacks with groups, selected nodes, route presets, config
+  versions, fingerprints, refresh limits, and delivery logs.
 - Unit/page tests and Playwright e2e smoke tests with system calls mocked.
 
 ## 1.3.2 Observability
@@ -35,11 +36,9 @@ features.
 
 ## 1.4 Managed Client Configs
 
-- Replace or complement raw URL delivery with generated sing-box client config
-  delivery for managed users.
-- Let groups choose route presets for generated client configs.
+- Manually test generated sing-box JSON import on the target client devices.
 - Add a client-facing export format only after selecting a concrete target
-  client and testing import behavior.
+  client that needs something other than generic sing-box JSON.
 - Decide whether route guards should become configurable only after generated
   client configs have a clear UX and import path.
 - Keep raw URL delivery available until generated config delivery is proven
