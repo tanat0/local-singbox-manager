@@ -85,6 +85,16 @@ diagnostics and re-activate a node after changing the setting.
 - Logs page can show all logs, warnings/errors, fatal/error, and text grep.
 - Diagnostics page runs live checks and shows recent latency history from the
   SQLite health log.
+- Problem Digest groups recent sing-box DNS and connection errors by target and
+  normalized reason. It is a triage view; raw logs remain the source of truth.
+
+Common Problem Digest reasons:
+
+| Reason | Meaning | First checks |
+| --- | --- | --- |
+| `dns response EOF` | The configured DNS upstream closed the exchange before a usable answer arrived. | Check Diagnostics, try another DNS preset, then re-activate the node/profile. |
+| `remote dial timeout` | The selected outbound or remote server could not connect to the target IP/port before timeout. | Check whether the site/app is reachable later, compare another node, and inspect raw logs for the target. |
+| `stream canceled by remote` | The remote side canceled an existing stream. Occasional entries can be normal client/server churn. | Investigate only when counts grow with visible connectivity problems. |
 
 Health checks:
 
@@ -121,6 +131,9 @@ Recent deploys:
 sqlite3 singbox_manager.db \
   "SELECT started_at, node_tag, stage_reached, success, rolled_back FROM deploy_log ORDER BY id DESC LIMIT 10;"
 ```
+
+For host migration, database backup, and rollback-failure procedures, see
+[Disaster Recovery](recovery.md).
 
 ## Notifications
 
@@ -215,6 +228,19 @@ users in that group receive a best-effort Telegram notification if a bot token
 is configured. Failures are written to `config_delivery_log`.
 
 ## Troubleshooting
+
+### Read-only operations smoke check
+
+Run the smoke check after install, upgrade, or host migration:
+
+```bash
+make ops-check
+```
+
+The command checks helper presence, non-interactive sudo access for the
+read-only `list-backups` helper action, the sing-box binary, systemd service
+state, and expected config/backup/sudoers paths. It does not deploy configs,
+restore backups, or restart services.
 
 ### Helper not found
 

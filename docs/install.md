@@ -190,3 +190,7 @@ rm singbox_manager.db
 
 Start the app and import the exported JSON from the Nodes page. Old schemas
 that stored generated outbound JSON are not migrated in place.
+
+For host migration or disaster recovery, preserve the database, `.env`, rendered
+systemd/sudoers files, and sing-box backups before reinstalling. See
+[Disaster Recovery](recovery.md).

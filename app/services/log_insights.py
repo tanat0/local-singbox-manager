@@ -16,9 +16,15 @@ class LogInsight:
     target: Optional[str] = None
 
 
-_CONNECTION_RE = re.compile(
-    r"connection: open connection to (?P<target>\S+) "
+_OPEN_CONNECTION_RE = re.compile(
+    r"connection: open (?:outbound )?connection to (?P<target>\S+) "
     r"using outbound/(?P<protocol>[^\[]+)\[(?P<tag>[^\]]+)\]: (?P<reason>.+)$"
+)
+_CLOSED_CONNECTION_RE = re.compile(
+    r"connection: connection (?P<direction>download|upload) closed: (?P<reason>.+)$"
+)
+_DIAL_TIMEOUT_RE = re.compile(
+    r"dial tcp(?:4|6)? (?P<target>(?:\[[^\]]+\]|[^:\s]+):\d+): i/o timeout"
 )
 _DNS_RE = re.compile(r"dns: exchange failed for (?P<target>[^:]+): (?P<reason>.+)$")
 
@@ -39,15 +45,15 @@ def summarize_problem_logs(text: str, limit: int = 8) -> List[LogInsight]:
         existing = buckets.get(key)
         if existing:
             existing.count += 1
-            existing.last_seen = parsed.last_seen
+            existing.last_seen = max(existing.last_seen, parsed.last_seen)
         else:
             buckets[key] = parsed
 
-    return sorted(buckets.values(), key=lambda item: (-item.count, item.last_seen))[:limit]
+    return sorted(buckets.values(), key=lambda item: (item.count, item.last_seen), reverse=True)[:limit]
 
 
 def _parse_line(line: str) -> Optional[LogInsight]:
-    connection = _CONNECTION_RE.search(line)
+    connection = _OPEN_CONNECTION_RE.search(line)
     if connection:
         return LogInsight(
             kind="connection",
@@ -55,6 +61,17 @@ def _parse_line(line: str) -> Optional[LogInsight]:
             outbound_tag=connection.group("tag").strip(),
             target=connection.group("target").strip(),
             reason=_normalize_reason(connection.group("reason")),
+            count=1,
+            last_seen=_timestamp_hint(line),
+        )
+
+    closed = _CLOSED_CONNECTION_RE.search(line)
+    if closed:
+        reason = closed.group("reason")
+        return LogInsight(
+            kind="connection",
+            target=_target_from_reason(reason),
+            reason=_normalize_reason(reason),
             count=1,
             last_seen=_timestamp_hint(line),
         )
@@ -74,11 +91,32 @@ def _parse_line(line: str) -> Optional[LogInsight]:
 
 def _normalize_reason(reason: str) -> str:
     text = " ".join(reason.strip().split())
+    text = _strip_reason_wrapper(text)
     if "no recent network activity" in text:
         return "timeout: no recent network activity"
     if "read response: EOF" in text:
         return "dns response EOF"
+    if _DIAL_TIMEOUT_RE.search(text):
+        return "remote dial timeout"
+    if "canceled by remote" in text:
+        return "stream canceled by remote"
+    if "operation was canceled" in text:
+        return "operation canceled"
     return text[:160]
+
+
+def _strip_reason_wrapper(text: str) -> str:
+    for prefix in ("remote error: ", "remote: "):
+        if text.startswith(prefix):
+            return text[len(prefix):]
+    return text
+
+
+def _target_from_reason(reason: str) -> Optional[str]:
+    match = _DIAL_TIMEOUT_RE.search(reason)
+    if match:
+        return match.group("target")
+    return None
 
 
 def _timestamp_hint(line: str) -> str:

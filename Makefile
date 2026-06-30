@@ -1,4 +1,4 @@
-.PHONY: install dev-install lock lock-check export-requirements run lint test e2e check-fast check install-hooks doctor telegram-check
+.PHONY: install dev-install lock lock-check export-requirements run lint test e2e check-fast check install-hooks doctor telegram-check ops-check
 
 VENV := .venv
 VENV_PYTHON := $(VENV)/bin/python
@@ -59,3 +59,6 @@ doctor:
 
 telegram-check:
 	$(PYTHON) scripts/check-telegram.py
+
+ops-check:
+	$(PYTHON) scripts/check-ops.py

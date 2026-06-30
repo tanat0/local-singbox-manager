@@ -169,6 +169,7 @@ More detail:
 
 - [docs/architecture.md](docs/architecture.md)
 - [docs/design-decisions.md](docs/design-decisions.md)
+- [docs/recovery.md](docs/recovery.md)
 - [docs/roadmap.md](docs/roadmap.md)
 
 ## Threat Model

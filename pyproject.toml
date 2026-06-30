@@ -48,6 +48,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "migrations/env.py" = ["E402"]
 "migrations/versions/*.py" = ["E501"]
+"scripts/check-ops.py" = ["E402"]
 "scripts/check-telegram.py" = ["E402"]
 "tests/test_metrics.py" = ["E402"]
 "tests/test_profiles.py" = ["E402"]
