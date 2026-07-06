@@ -67,7 +67,7 @@ async def test_dispatcher_routes_user():
 @pytest.mark.asyncio
 async def test_user_handler_config():
     user = MagicMock(id=1, telegram_id="99", display_name="Alex")
-    group = MagicMock(id=2, name="family")
+    group = SimpleNamespace(id=2, name="family")
     node = MagicMock(tag="node-a", protocol="vless", raw_url="vless://example")
     assignment = UserAssignment(user=user, group=group, nodes=[node], config_version=4, config_fingerprint="c" * 64)
     db = MagicMock()
@@ -99,6 +99,37 @@ async def test_user_handler_config():
 
 
 @pytest.mark.asyncio
+async def test_user_handler_sbclient():
+    user = MagicMock(id=1, telegram_id="99", display_name="Alex")
+    group = SimpleNamespace(id=2, name="family")
+    node = MagicMock(tag="node-a", protocol="vless", raw_url="vless://example")
+    assignment = UserAssignment(user=user, group=group, nodes=[node], config_version=4, config_fingerprint="c" * 64)
+    db = MagicMock()
+    handler = UserCommandHandler(UserHandlerDeps(session_factory=lambda: db))
+
+    with patch("app.telegram.handlers.get_user_assignment", return_value=assignment), \
+         patch("app.telegram.handlers.refresh_limit_exceeded", return_value=False), \
+         patch("app.telegram.handlers.build_sbclient_bundle_document", return_value=SimpleNamespace(
+             filename="singbox-client-family-v4.sbclient",
+             content=b"{}",
+             mime_type="application/json",
+             caption="bundle",
+         )), \
+         patch("app.telegram.handlers.record_delivery") as record_delivery:
+        response = await handler.handle(
+            TelegramMessage(actor_id=99, chat_id=99, text="/sbclient"),
+            ParsedCommand("/sbclient"),
+        )
+
+    assert response.ok is True
+    assert "Group: family" in response.text
+    assert response.document is not None
+    assert response.document.filename == "singbox-client-family-v4.sbclient"
+    assert record_delivery.called
+    assert db.close.called
+
+
+@pytest.mark.asyncio
 async def test_user_handler_config_rate_limited():
     user = MagicMock(id=1, telegram_id="99", display_name="Alex")
     group = MagicMock(id=2, name="family")
@@ -112,6 +143,29 @@ async def test_user_handler_config_rate_limited():
         response = await handler.handle(
             TelegramMessage(actor_id=99, chat_id=99, text="/refresh"),
             ParsedCommand("/refresh"),
+        )
+
+    assert response.ok is False
+    assert response.text == "Refresh limit reached. Try later."
+    assert response.document is None
+    record_delivery.assert_called_once()
+    assert db.close.called
+
+
+@pytest.mark.asyncio
+async def test_user_handler_sbclient_rate_limited():
+    user = MagicMock(id=1, telegram_id="99", display_name="Alex")
+    group = MagicMock(id=2, name="family")
+    assignment = UserAssignment(user=user, group=group, nodes=[], config_version=1, config_fingerprint="d" * 64)
+    db = MagicMock()
+    handler = UserCommandHandler(UserHandlerDeps(session_factory=lambda: db))
+
+    with patch("app.telegram.handlers.get_user_assignment", return_value=assignment), \
+         patch("app.telegram.handlers.refresh_limit_exceeded", return_value=True), \
+         patch("app.telegram.handlers.record_delivery") as record_delivery:
+        response = await handler.handle(
+            TelegramMessage(actor_id=99, chat_id=99, text="/sbclient"),
+            ParsedCommand("/sbclient"),
         )
 
     assert response.ok is False

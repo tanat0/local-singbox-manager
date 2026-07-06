@@ -42,8 +42,8 @@ control plane, and no remote exposure by default.
 ### Small Trusted-User Workflow
 
 - Store managed Telegram users and groups.
-- Generate user-specific sing-box config files and raw-link fallbacks from
-  selected nodes.
+- Generate user-specific sing-box config files, `.sbclient` bundles, and raw-link
+  fallbacks from selected nodes.
 - Send config updates through Telegram.
 - Track group versions, deterministic config fingerprints, delivery attempts,
   and refresh limits.

@@ -13,6 +13,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   best-effort Telegram notifications when assigned configs change.
 - Managed-user delivery can now attach generated sing-box JSON configs through
   Telegram while keeping raw proxy URLs as fallback.
+- Managed-user delivery can now attach `.sbclient` bundles for the local
+  `singbox-client` app through a separate `/sbclient` Telegram command, without
+  adding a client sync API.
 - Local quality gates: check-only git hooks, `make check-fast`, `make check`,
   and `make doctor`.
 

@@ -22,6 +22,8 @@ features.
 - Managed-user Telegram delivery of generated sing-box JSON configs plus raw
   proxy URL fallbacks with groups, selected nodes, route presets, config
   versions, fingerprints, refresh limits, and delivery logs.
+- Separate managed-user Telegram delivery of `.sbclient` bundles for the local
+  `singbox-client` app through `/sbclient`.
 - Unit/page tests and Playwright e2e smoke tests with system calls mocked.
 
 ## 1.3.2 Observability
@@ -37,8 +39,9 @@ features.
 ## 1.4 Managed Client Configs
 
 - Manually test generated sing-box JSON import on the target client devices.
-- Add a client-facing export format only after selecting a concrete target
-  client that needs something other than generic sing-box JSON.
+- Manually test `.sbclient` import on target Windows and Android devices.
+- Add a web admin download action for `.sbclient` bundles if operators need a
+  non-Telegram export path.
 - Decide whether route guards should become configurable only after generated
   client configs have a clear UX and import path.
 - Keep raw URL delivery available until generated config delivery is proven
