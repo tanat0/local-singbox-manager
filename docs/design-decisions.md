@@ -89,10 +89,16 @@ Managed users receive generated sing-box JSON configs through Telegram
 commands. The same response still includes raw proxy URLs as a fallback while
 real client import behavior is being tested.
 
+The companion `singbox-client` app uses a smaller `.sbclient` offline import
+bundle. That bundle is delivered through a separate `/sbclient` command instead
+of replacing `/config`, because generic sing-box JSON and `.sbclient` serve
+different clients.
+
 Reason:
 
 - raw URLs are the format already stored by the app
 - generic sing-box JSON is the smallest concrete client config target
+- `.sbclient` is a client-specific offline import contract, not a sync API
 - different graphical clients have different import behavior
 - server-side enforcement is not available in the local client manager
 

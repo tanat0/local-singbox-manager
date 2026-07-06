@@ -194,6 +194,7 @@ Managed non-admin Telegram users can call:
 /status
 /config
 /refresh
+/sbclient
 ```
 
 The Users page controls:
@@ -211,13 +212,20 @@ and a generated sing-box JSON config file. The file uses the group's route
 preset and includes the same always-on route guards as the locally deployed TUN
 config.
 
+`/sbclient` returns a separate `.sbclient` JSON bundle for the companion
+`singbox-client` app. It creates one profile per assigned node, uses the group
+route preset for every profile, defaults DNS to `quad9_tls`, and keeps the
+default profile deterministic by sorting node tags. This is an offline import
+file, not a client sync protocol.
+
 When a group has multiple nodes, the generated file contains a sing-box
 `selector` outbound named `proxy`. The default selector target is the first
 assigned node after sorting by tag.
 
 The fingerprint is a sha256 hash over the group route preset plus sorted
 `tag`, `protocol`, and `raw_url` values for the assigned nodes. Generated config
-files contain proxy credentials and should be treated as sensitive.
+files and `.sbclient` bundles contain proxy credentials and should be treated as
+sensitive.
 
 Refresh limits use a rolling one-hour window. User override wins over group
 limit; otherwise the default is 10 deliveries per hour. Blocked attempts are

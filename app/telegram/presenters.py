@@ -28,7 +28,7 @@ def admin_help() -> str:
 
 
 def user_help() -> str:
-    return "Commands:\n/status\n/config\n/refresh"
+    return "Commands:\n/status\n/config\n/refresh\n/sbclient"
 
 
 def format_service_status(status: dict, active_tag: str, external_ip: str) -> str:
@@ -90,6 +90,7 @@ def format_user_configs(assignment: UserAssignment) -> str:
         f"Route preset: {assignment.route_preset}",
         f"Fingerprint: {assignment.config_fingerprint[:12] or '-'}",
         "Generated sing-box config is attached.",
+        "Use /sbclient to get a singbox-client .sbclient bundle.",
         "Raw proxy links remain below as fallback:",
         "",
     ]

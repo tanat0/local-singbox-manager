@@ -27,7 +27,7 @@ class UserAssignment:
     refresh_limit_per_hour: int = 10
 
 
-DELIVERY_ACTIONS = ("/config", "/refresh")
+DELIVERY_ACTIONS = ("/config", "/refresh", "/sbclient")
 DEFAULT_REFRESH_LIMIT_PER_HOUR = 10
 RATE_LIMIT_MESSAGE = "Refresh limit reached. Try later."
 

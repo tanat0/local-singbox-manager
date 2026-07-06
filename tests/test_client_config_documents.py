@@ -1,7 +1,9 @@
 import json
 
+import pytest
+
 from app.models import Node
-from app.services.client_configs import build_client_config_document
+from app.services.client_configs import build_client_config_document, build_sbclient_bundle_document
 from app.services.distribution import UserAssignment
 
 
@@ -42,3 +44,41 @@ def test_build_client_config_document():
     assert "Family Devices" in document.caption
     assert payload["route"]["final"] == "node-a"
     assert any(rule.get("ip_is_private") for rule in payload["route"]["rules"])
+
+
+def test_build_sbclient_bundle_document():
+    assignment = UserAssignment(
+        user=None,
+        group=type("Group", (), {"name": "Family Devices"})(),
+        nodes=[_node("node-b"), _node("node-a")],
+        config_version=7,
+        config_fingerprint="b" * 64,
+        route_preset="bypass_ru",
+    )
+
+    document = build_sbclient_bundle_document(assignment)
+    payload = json.loads(document.content.decode("utf-8"))
+
+    assert document.filename == "singbox-client-family-devices-v7.sbclient"
+    assert document.mime_type == "application/json"
+    assert "Family Devices" in document.caption
+    assert payload["schema_version"] == 1
+    assert payload["default_profile"] == "node-a"
+    assert [profile["name"] for profile in payload["profiles"]] == ["node-a", "node-b"]
+    assert payload["profiles"][0]["dns_preset"] == "quad9_tls"
+    assert payload["profiles"][0]["route_preset"] == "bypass_ru"
+    assert payload["profiles"][0]["raw_url"].startswith("vless://")
+
+
+def test_build_sbclient_bundle_rejects_client_incompatible_profile_name():
+    assignment = UserAssignment(
+        user=None,
+        group=type("Group", (), {"name": "Family Devices"})(),
+        nodes=[_node("n" * 81)],
+        config_version=7,
+        config_fingerprint="b" * 64,
+        route_preset="bypass_ru",
+    )
+
+    with pytest.raises(ValueError, match="too long"):
+        build_sbclient_bundle_document(assignment)

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app import notify
 from app.health import check_external_ip, run_health_checks
 from app.repositories import AuditRepository, NodeRepository
-from app.services.client_configs import build_client_config_document
+from app.services.client_configs import build_client_config_document, build_sbclient_bundle_document
 from app.services.deploy import ActivationResult, activate_node
 from app.services.distribution import RATE_LIMIT_MESSAGE, get_user_assignment, record_delivery, refresh_limit_exceeded
 from app.singbox import service as svc
@@ -174,6 +174,30 @@ class UserCommandHandler:
                     assignment.error
                     or f"{len(assignment.nodes)} raw fallback link(s) and generated config prepared"
                 )
+                record_delivery(db, actor, command.name, ok, assignment, detail)
+                return BotResponse(ok, text, document=document)
+
+            if command.name == "/sbclient":
+                if not assignment.error and refresh_limit_exceeded(db, assignment):
+                    record_delivery(db, actor, command.name, False, assignment, "refresh limit exceeded")
+                    return BotResponse(False, RATE_LIMIT_MESSAGE)
+                ok = not bool(assignment.error)
+                document = None
+                if ok:
+                    try:
+                        client_document = build_sbclient_bundle_document(assignment)
+                        document = TelegramDocument(
+                            filename=client_document.filename,
+                            content=client_document.content,
+                            mime_type=client_document.mime_type,
+                            caption=client_document.caption,
+                        )
+                    except Exception as exc:
+                        detail = f"generated sbclient bundle failed: {type(exc).__name__}"
+                        record_delivery(db, actor, command.name, False, assignment, detail)
+                        return BotResponse(False, "Could not prepare .sbclient bundle. Contact operator.")
+                text = presenters.format_user_status(assignment)
+                detail = assignment.error or f"{len(assignment.nodes)} profile(s) in .sbclient bundle prepared"
                 record_delivery(db, actor, command.name, ok, assignment, detail)
                 return BotResponse(ok, text, document=document)
 
