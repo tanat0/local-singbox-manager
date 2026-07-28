@@ -28,6 +28,22 @@ recovery from `/etc/sing-box/backups`.
 `reload` is not used for deploys because TUN configs can fail on reload while
 the old interface is still open.
 
+## VLESS Transports
+
+Generated sing-box configs support these VLESS URL transport values:
+
+- `type=tcp` or omitted: plain VLESS over TCP, without forcing sing-box
+  outbound `network`
+- `type=http`, `type=h2`, or `type=http2`: sing-box HTTP transport
+- `type=grpc`: sing-box gRPC transport using `serviceName`
+- `type=ws` or `type=websocket`: sing-box WebSocket transport
+- `type=httpupgrade`: sing-box HTTPUpgrade transport
+
+Generated configs reject `xhttp`/`splithttp`, `quic`, and `headerType=http`.
+Those modes are not treated as supported until they are verified against the
+target sing-box runtime and client import path. Raw URL fallback delivery still
+shows the original link when an attachment cannot be prepared.
+
 ## Profiles
 
 A profile stores a node plus DNS and route presets. Activating a profile runs

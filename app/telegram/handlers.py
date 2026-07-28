@@ -156,6 +156,7 @@ class UserCommandHandler:
                     return BotResponse(False, RATE_LIMIT_MESSAGE)
                 ok = not bool(assignment.error)
                 document = None
+                document_error = None
                 if ok:
                     try:
                         client_document = build_client_config_document(assignment)
@@ -166,15 +167,19 @@ class UserCommandHandler:
                             caption=client_document.caption,
                         )
                     except Exception as exc:
-                        detail = f"generated client config failed: {type(exc).__name__}"
-                        record_delivery(db, actor, command.name, False, assignment, detail)
-                        return BotResponse(False, "Could not prepare generated config. Contact operator.")
+                        document_error = f"generated client config failed: {type(exc).__name__}"
                 text = presenters.format_user_configs(assignment)
+                if document_error:
+                    text += (
+                        "\n\nGenerated sing-box config is unavailable for this assignment. "
+                        "Use the raw fallback links above."
+                    )
                 detail = (
                     assignment.error
+                    or document_error
                     or f"{len(assignment.nodes)} raw fallback link(s) and generated config prepared"
                 )
-                record_delivery(db, actor, command.name, ok, assignment, detail)
+                record_delivery(db, actor, command.name, ok and not document_error, assignment, detail)
                 return BotResponse(ok, text, document=document)
 
             if command.name == "/sbclient":
@@ -183,6 +188,7 @@ class UserCommandHandler:
                     return BotResponse(False, RATE_LIMIT_MESSAGE)
                 ok = not bool(assignment.error)
                 document = None
+                document_error = None
                 if ok:
                     try:
                         client_document = build_sbclient_bundle_document(assignment)
@@ -193,12 +199,19 @@ class UserCommandHandler:
                             caption=client_document.caption,
                         )
                     except Exception as exc:
-                        detail = f"generated sbclient bundle failed: {type(exc).__name__}"
-                        record_delivery(db, actor, command.name, False, assignment, detail)
-                        return BotResponse(False, "Could not prepare .sbclient bundle. Contact operator.")
+                        document_error = f"generated sbclient bundle failed: {type(exc).__name__}"
                 text = presenters.format_user_status(assignment)
-                detail = assignment.error or f"{len(assignment.nodes)} profile(s) in .sbclient bundle prepared"
-                record_delivery(db, actor, command.name, ok, assignment, detail)
+                if document_error:
+                    text = (
+                        presenters.format_user_configs(assignment)
+                        + "\n\n.sbclient bundle is unavailable for this assignment. Use the raw fallback links above."
+                    )
+                detail = (
+                    assignment.error
+                    or document_error
+                    or f"{len(assignment.nodes)} profile(s) in .sbclient bundle prepared"
+                )
+                record_delivery(db, actor, command.name, ok and not document_error, assignment, detail)
                 return BotResponse(ok, text, document=document)
 
             record_delivery(db, actor, command.name or "unknown", False, assignment, "unknown command")

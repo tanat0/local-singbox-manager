@@ -24,6 +24,9 @@ features.
   versions, fingerprints, refresh limits, and delivery logs.
 - Separate managed-user Telegram delivery of `.sbclient` bundles for the local
   `singbox-client` app through `/sbclient`.
+- VLESS transport compatibility for generated configs: HTTP/H2, gRPC,
+  WebSocket, and HTTPUpgrade are mapped to sing-box `transport` objects; known
+  unsupported modes fail explicitly instead of producing invalid JSON.
 - Unit/page tests and Playwright e2e smoke tests with system calls mocked.
 
 ## 1.3.2 Observability
@@ -36,10 +39,12 @@ features.
 - Keep raw logs and detailed latency charts on Logs/Diagnostics pages.
 - Document that observed tunnel health is not remote server uptime.
 
-## 1.4 Managed Client Configs
+## 1.4 Client Config Delivery Validation
 
 - Manually test generated sing-box JSON import on the target client devices.
 - Manually test `.sbclient` import on target Windows and Android devices.
+- Keep raw URL fallback visible when generated JSON or `.sbclient` attachments
+  cannot be prepared for an unsupported transport.
 - Add a web admin download action for `.sbclient` bundles if operators need a
   non-Telegram export path.
 - Decide whether route guards should become configurable only after generated
@@ -56,6 +61,16 @@ features.
 - Improve manual restore documentation for rollback failure cases.
 - Continue splitting broad tests or service modules only when feature work makes
   the current shape harder to maintain.
+
+## 1.6 3x-ui Relay Topology
+
+- Document the first supported relay topology as manual inventory:
+  client or managed user config -> RU 3x-ui inbound -> upstream nodes.
+- Add node/topology metadata only if it helps the operator understand which
+  stored links are entry relays and which are upstream exits.
+- Treat exported 3x-ui links as ordinary imported nodes in the first pass.
+- Do not store 3x-ui panel credentials or call the 3x-ui API until there is a
+  concrete operation that cannot be handled by manual import/export.
 
 ## Non-Goals
 

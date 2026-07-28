@@ -7,7 +7,7 @@ from app.services.distribution import UserAssignment
 from app.services.nodes import deserialize_node
 from app.singbox.client_generator import generate_client_config
 from app.singbox.dns import DEFAULT_DNS_PRESET
-from app.singbox.generator import config_to_json
+from app.singbox.generator import build_outbound, config_to_json
 
 _FILENAME_SAFE = re.compile(r"[^a-zA-Z0-9._-]+")
 _MAX_SBCLIENT_PROFILE_NAME_LENGTH = 80
@@ -73,6 +73,7 @@ def _sbclient_profiles(assignment: UserAssignment) -> list[dict[str, str]]:
     profiles: list[dict[str, str]] = []
     seen_names: set[str] = set()
     for node in sorted(assignment.nodes, key=lambda item: item.tag):
+        build_outbound(deserialize_node(node))
         name = str(node.tag or "").strip()
         if not name:
             raise ValueError("Node tag is required for .sbclient profile name")
