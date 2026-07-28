@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
-from typing import Any
+from typing import Any, Optional
 
 from app.parsers.base import ParsedNode
 from app.parsers.hysteria2 import Hysteria2Node
@@ -19,11 +19,14 @@ def _build_vless_outbound(node: VlessNode) -> dict[str, Any]:
         "server": node.server,
         "server_port": node.port,
         "uuid": node.uuid,
-        "network": node.network,
     }
     # flow is ONLY added when explicitly present in the URL
     if node.flow:
         out["flow"] = node.flow
+
+    transport = _build_vless_transport(node)
+    if transport:
+        out["transport"] = transport
 
     if node.security == "reality":
         if not node.pbk:
@@ -47,6 +50,59 @@ def _build_vless_outbound(node: VlessNode) -> dict[str, Any]:
         }
 
     return out
+
+
+def _build_vless_transport(node: VlessNode) -> Optional[dict[str, Any]]:
+    transport_type = (node.transport_type or "tcp").strip().lower()
+    if transport_type == "tcp":
+        if (node.header_type or "").strip().lower() in {"http"}:
+            raise ValueError("VLESS TCP headerType=http is not supported by generated sing-box configs")
+        return None
+    if transport_type == "http":
+        transport: dict[str, Any] = {"type": "http"}
+        hosts = _split_hosts(node.host)
+        if hosts:
+            transport["host"] = hosts
+        if node.path:
+            transport["path"] = node.path
+        return transport
+    if transport_type == "grpc":
+        transport = {"type": "grpc"}
+        if node.service_name:
+            transport["service_name"] = node.service_name
+        return transport
+    if transport_type == "ws":
+        transport = {"type": "ws"}
+        if node.path:
+            transport["path"] = node.path
+        host = _first_host(node.host)
+        if host:
+            transport["headers"] = {"Host": host}
+        return transport
+    if transport_type == "httpupgrade":
+        transport = {"type": "httpupgrade"}
+        host = _first_host(node.host)
+        if host:
+            transport["host"] = host
+        if node.path:
+            transport["path"] = node.path
+        return transport
+    if transport_type in {"xhttp", "splithttp"}:
+        raise ValueError("VLESS XHTTP/SplitHTTP is not supported by generated sing-box configs")
+    if transport_type == "quic":
+        raise ValueError("VLESS QUIC transport is not supported by generated sing-box configs")
+    raise ValueError(f"Unsupported VLESS transport: {transport_type!r}")
+
+
+def _split_hosts(value: Optional[str]) -> list[str]:
+    if not value:
+        return []
+    return [part.strip() for part in value.split(",") if part.strip()]
+
+
+def _first_host(value: Optional[str]) -> Optional[str]:
+    hosts = _split_hosts(value)
+    return hosts[0] if hosts else None
 
 
 def _build_hysteria2_outbound(node: Hysteria2Node) -> dict[str, Any]:

@@ -1,4 +1,5 @@
 import json
+from typing import Optional
 
 import pytest
 
@@ -7,14 +8,15 @@ from app.services.client_configs import build_client_config_document, build_sbcl
 from app.services.distribution import UserAssignment
 
 
-def _node(tag: str) -> Node:
+def _node(tag: str, raw_url: Optional[str] = None) -> Node:
+    raw_url = raw_url or f"vless://12345678-abcd-0000-0000-000000000001@1.2.3.4:443?type=tcp#{tag}"
     return Node(
         tag=tag,
         protocol="vless",
-        raw_url=f"vless://12345678-abcd-0000-0000-000000000001@1.2.3.4:443?type=tcp#{tag}",
+        raw_url=raw_url,
         parsed_json=json.dumps({
             "protocol": "vless",
-            "raw_url": f"vless://12345678-abcd-0000-0000-000000000001@1.2.3.4:443?type=tcp#{tag}",
+            "raw_url": raw_url,
             "tag": tag,
             "server": "1.2.3.4",
             "port": 443,
@@ -81,4 +83,20 @@ def test_build_sbclient_bundle_rejects_client_incompatible_profile_name():
     )
 
     with pytest.raises(ValueError, match="too long"):
+        build_sbclient_bundle_document(assignment)
+
+
+def test_generated_documents_reject_unsupported_transport():
+    assignment = UserAssignment(
+        user=None,
+        group=type("Group", (), {"name": "Family Devices"})(),
+        nodes=[_node("xhttp-node", raw_url="vless://uuid@1.2.3.4:443?type=xhttp#xhttp-node")],
+        config_version=7,
+        config_fingerprint="b" * 64,
+        route_preset="bypass_ru",
+    )
+
+    with pytest.raises(ValueError, match="XHTTP"):
+        build_client_config_document(assignment)
+    with pytest.raises(ValueError, match="XHTTP"):
         build_sbclient_bundle_document(assignment)

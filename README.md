@@ -12,8 +12,8 @@ This is not a hosted VPN panel or public control plane. It stores local proxy
 URLs, generates sing-box configs, deploys them through a small sudo helper, and
 keeps local audit logs in SQLite.
 
-Current released version: `1.3.0`. `main` also contains the unreleased `1.3.1`
-hardening work listed in [CHANGELOG.md](CHANGELOG.md).
+Current released version: `1.3.0`. `main` also contains unreleased hardening
+work listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## Why This Exists
 

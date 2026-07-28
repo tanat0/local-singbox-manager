@@ -61,3 +61,27 @@ def test_deserialize_hysteria2_does_not_double_decode_current_payload():
     parsed = deserialize_node(node)
 
     assert parsed.auth == "%24literal"
+
+
+def test_deserialize_legacy_vless_reparses_transport_from_raw_url():
+    raw_url = "vless://uuid@1.2.3.4:443?type=grpc&serviceName=tun#vless-legacy"
+    node = _stored_node(
+        raw_url,
+        {
+            "protocol": "vless",
+            "raw_url": raw_url,
+            "tag": "vless-legacy",
+            "server": "1.2.3.4",
+            "port": 443,
+            "schema_version": 1,
+            "extra_params": {},
+            "uuid": "uuid",
+            "network": "grpc",
+            "security": "none",
+        },
+    )
+
+    outbound = build_outbound(deserialize_node(node))
+
+    assert "network" not in outbound
+    assert outbound["transport"] == {"type": "grpc", "service_name": "tun"}

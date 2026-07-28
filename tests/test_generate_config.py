@@ -30,6 +30,56 @@ def test_vless_reality_structure():
     assert out["tls"]["reality"]["public_key"] == "pubkey"
 
 
+def test_vless_tcp_transport_does_not_pin_network():
+    out = build_outbound(parse_vless(VLESS_URL))
+    assert "network" not in out
+    assert "transport" not in out
+
+
+@pytest.mark.parametrize("transport_alias", ["http", "h2", "http2"])
+def test_vless_http_transport(transport_alias):
+    url = (
+        "vless://uuid@1.2.3.4:443"
+        f"?type={transport_alias}&host=a.example,b.example&path=/proxy#http-node"
+    )
+
+    out = build_outbound(parse_vless(url))
+
+    assert out["transport"] == {
+        "type": "http",
+        "host": ["a.example", "b.example"],
+        "path": "/proxy",
+    }
+
+
+def test_vless_grpc_transport():
+    out = build_outbound(parse_vless("vless://uuid@1.2.3.4:443?type=grpc&serviceName=tun#grpc-node"))
+    assert out["transport"] == {"type": "grpc", "service_name": "tun"}
+
+
+def test_vless_websocket_transport():
+    out = build_outbound(parse_vless("vless://uuid@1.2.3.4:443?type=websocket&host=edge.example&path=/ws#ws-node"))
+    assert out["transport"] == {"type": "ws", "path": "/ws", "headers": {"Host": "edge.example"}}
+
+
+def test_vless_httpupgrade_transport():
+    out = build_outbound(
+        parse_vless("vless://uuid@1.2.3.4:443?type=httpupgrade&host=edge.example&path=/upgrade#httpupgrade-node")
+    )
+    assert out["transport"] == {"type": "httpupgrade", "host": "edge.example", "path": "/upgrade"}
+
+
+@pytest.mark.parametrize("transport_type", ["xhttp", "splithttp", "quic"])
+def test_vless_unsupported_transports_raise_clear_error(transport_type):
+    with pytest.raises(ValueError, match="not supported|Unsupported"):
+        build_outbound(parse_vless(f"vless://uuid@1.2.3.4:443?type={transport_type}#bad-node"))
+
+
+def test_vless_tcp_header_type_http_is_rejected():
+    with pytest.raises(ValueError, match="headerType=http"):
+        build_outbound(parse_vless("vless://uuid@1.2.3.4:443?type=tcp&headerType=http#bad-node"))
+
+
 # ---- full config generation ----
 
 def test_config_required_top_keys():

@@ -85,7 +85,21 @@ def test_outbound_basic_fields():
     assert out["type"] == "vless"
     assert out["server"] == "78.40.108.81"
     assert out["server_port"] == 8443
-    assert out["network"] == "tcp"
+    assert "network" not in out
+
+
+def test_parse_transport_aliases():
+    assert parse_vless("vless://uuid@1.2.3.4:443?type=h2#t").transport_type == "http"
+    assert parse_vless("vless://uuid@1.2.3.4:443?type=http2#t").transport_type == "http"
+    assert parse_vless("vless://uuid@1.2.3.4:443?type=websocket#t").transport_type == "ws"
+
+
+def test_parse_transport_fields():
+    node = parse_vless("vless://uuid@1.2.3.4:443?type=grpc&serviceName=tun&host=edge.example&path=/v#t")
+    assert node.transport_type == "grpc"
+    assert node.service_name == "tun"
+    assert node.host == "edge.example"
+    assert node.path == "/v"
 
 
 def test_tag_url_decoded():

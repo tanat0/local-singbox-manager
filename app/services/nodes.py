@@ -34,13 +34,30 @@ def deserialize_node(node: Node) -> ParsedNode:
     data = json.loads(node.parsed_json)
     proto = data.get("protocol", "")
     if proto == "vless":
-        return VlessNode.model_validate(data)
+        return VlessNode.model_validate(_normalize_vless_payload(node, data))
     if proto in ("hysteria2", "hy2"):
         return Hysteria2Node.model_validate(_normalize_hysteria2_payload(node, data))
     raise ValueError(
         f"Unknown protocol {proto!r} stored for node '{node.tag}' — "
         "delete and re-add this node from /nodes"
     )
+
+
+def _normalize_vless_payload(node: Node, data: Dict[str, object]) -> Dict[str, object]:
+    raw_url = str(getattr(node, "raw_url", "") or data.get("raw_url") or "")
+    if raw_url:
+        try:
+            parsed = parse_url(raw_url)
+        except Exception as exc:
+            logger.debug(
+                "Could not reparse stored VLESS raw URL for node '%s': %s",
+                getattr(node, "tag", "<unknown>"),
+                exc,
+            )
+        else:
+            if isinstance(parsed, VlessNode):
+                return parsed.to_dict()
+    return data
 
 
 def _normalize_hysteria2_payload(node: Node, data: Dict[str, object]) -> Dict[str, object]:

@@ -27,6 +27,7 @@ _DIAL_TIMEOUT_RE = re.compile(
     r"dial tcp(?:4|6)? (?P<target>(?:\[[^\]]+\]|[^:\s]+):\d+): i/o timeout"
 )
 _DNS_RE = re.compile(r"dns: exchange failed for (?P<target>[^:]+): (?P<reason>.+)$")
+_UNSUPPORTED_UDP_RE = re.compile(r"router: UDP is not supported by outbound: (?P<tag>\S+)")
 
 
 def summarize_problem_logs(text: str, limit: int = 8) -> List[LogInsight]:
@@ -82,6 +83,16 @@ def _parse_line(line: str) -> Optional[LogInsight]:
             kind="dns",
             target=dns.group("target").strip(),
             reason=_normalize_reason(dns.group("reason")),
+            count=1,
+            last_seen=_timestamp_hint(line),
+        )
+
+    unsupported_udp = _UNSUPPORTED_UDP_RE.search(line)
+    if unsupported_udp:
+        return LogInsight(
+            kind="routing",
+            outbound_tag=unsupported_udp.group("tag").strip(),
+            reason="UDP is not supported by outbound",
             count=1,
             last_seen=_timestamp_hint(line),
         )

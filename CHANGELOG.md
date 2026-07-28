@@ -5,7 +5,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
-## [1.3.1] — Unreleased
+## [Unreleased]
 
 ### Added
 - User distribution hardening: selectable node assignments, config versions,
@@ -30,6 +30,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   comprehension rules.
 - Dependency metadata now lives in `pyproject.toml` with `uv.lock`; tracked
   requirements files are compatibility exports.
+- VLESS URL `type` is now treated as a transport selector for generated
+  sing-box configs instead of being copied into outbound `network`.
+
+### Fixed
+- Generated VLESS configs no longer pin `network=tcp` by default, avoiding
+  TUN UDP rejection by TCP-only outbounds.
+- Unsupported VLESS transports such as XHTTP/SplitHTTP now fail with a clear
+  generator error instead of producing invalid sing-box JSON.
+- Telegram managed-user commands keep raw URL fallback text visible when a
+  generated JSON or `.sbclient` attachment cannot be prepared.
 
 ---
 

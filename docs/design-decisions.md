@@ -116,6 +116,22 @@ generated client config carries route presets and route guards, but applying it
 still depends on the user's client importing and using that file. This is
 client-side configuration distribution, not server-side enforcement.
 
+## VLESS Transport Compatibility
+
+The generator maps common VLESS URL transport values to sing-box `transport`
+objects: HTTP/H2, gRPC, WebSocket, and HTTPUpgrade. It does not copy the URL
+`type` parameter into outbound `network`.
+
+Unsupported transports such as XHTTP/SplitHTTP fail during config preparation
+instead of producing JSON that sing-box rejects later.
+
+Reason:
+
+- broken generated configs are worse than an explicit operator-visible error
+- transport support depends on the exact sing-box/runtime/client combination
+- XHTTP/SplitHTTP should be added only after a real import path and `sing-box
+  check` behavior are verified
+
 ## Always-On Route Guards
 
 Generated TUN configs include a small hardcoded routing policy for this local

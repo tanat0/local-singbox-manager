@@ -45,6 +45,21 @@ def test_summarizes_dns_exchange_eof():
     assert insights[0].reason == "dns response EOF"
 
 
+def test_summarizes_unsupported_udp_outbound():
+    text = (
+        "2026-07-25T22:36:36+03:00 desperado sing-box[12511]: +0300 "
+        "2026-07-25 22:36:36 ERROR [4081785932 0ms] "
+        "router: UDP is not supported by outbound: ge_main443"
+    )
+
+    insights = summarize_problem_logs(text)
+
+    assert len(insights) == 1
+    assert insights[0].kind == "routing"
+    assert insights[0].outbound_tag == "ge_main443"
+    assert insights[0].reason == "UDP is not supported by outbound"
+
+
 def test_summarizes_connection_download_remote_dial_timeout():
     text = (
         "2026-06-30T06:07:04+03:00 desperado sing-box[353036]: +0300 "
