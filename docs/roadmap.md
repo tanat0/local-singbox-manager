@@ -24,6 +24,8 @@ features.
   versions, fingerprints, refresh limits, and delivery logs.
 - Separate managed-user Telegram delivery of `.sbclient` bundles for the local
   `singbox-client` app through `/sbclient`.
+- Operator web download of generated sing-box JSON and `.sbclient` bundles from
+  the Users page.
 - VLESS transport compatibility for generated configs: HTTP/H2, gRPC,
   WebSocket, and HTTPUpgrade are mapped to sing-box `transport` objects; known
   unsupported modes fail explicitly instead of producing invalid JSON.
@@ -41,12 +43,12 @@ features.
 
 ## 1.4 Client Config Delivery Validation
 
+- Keep `docs/client-contract.md` aligned with the companion
+  `singbox-client/docs/client-bundle-v1.md` contract.
 - Manually test generated sing-box JSON import on the target client devices.
 - Manually test `.sbclient` import on target Windows and Android devices.
 - Keep raw URL fallback visible when generated JSON or `.sbclient` attachments
   cannot be prepared for an unsupported transport.
-- Add a web admin download action for `.sbclient` bundles if operators need a
-  non-Telegram export path.
 - Decide whether route guards should become configurable only after generated
   client configs have a clear UX and import path.
 - Keep raw URL delivery available until generated config delivery is proven

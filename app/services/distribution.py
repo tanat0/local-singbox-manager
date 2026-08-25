@@ -33,7 +33,7 @@ RATE_LIMIT_MESSAGE = "Refresh limit reached. Try later."
 
 
 def get_user_assignment(db: "Session", telegram_id: str) -> UserAssignment:
-    from app.models import ConfigGroup, ManagedUser, Node
+    from app.models import ConfigGroup, ManagedUser
 
     user = db.query(ManagedUser).filter(ManagedUser.telegram_id == telegram_id).first()
     if not user:
@@ -48,6 +48,24 @@ def get_user_assignment(db: "Session", telegram_id: str) -> UserAssignment:
         return UserAssignment(user, None, [], "Assigned config group no longer exists.")
     if not group.enabled:
         return UserAssignment(user, group, [], "Assigned config group is disabled.")
+    return _assignment_from_group(db, group, user=user)
+
+
+def get_group_artifact_assignment(db: "Session", group_id: int) -> UserAssignment:
+    from app.models import ConfigGroup
+
+    group = db.query(ConfigGroup).filter(ConfigGroup.id == group_id).first()
+    if not group:
+        return UserAssignment(None, None, [], "Config group not found.")
+    return _assignment_from_group(db, group)
+
+
+def _assignment_from_group(
+    db: "Session",
+    group: "ConfigGroup",
+    user: Optional["ManagedUser"] = None,
+) -> UserAssignment:
+    from app.models import Node
 
     tags = decode_node_tags(group.node_tags_json)
     if not tags:
@@ -84,10 +102,11 @@ def config_fingerprint(nodes: List["Node"], route_preset: str = DEFAULT_ROUTE_PR
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-def effective_refresh_limit(user: "ManagedUser", group: "ConfigGroup") -> int:
-    user_limit = _positive_int_or_none(user.refresh_limit_per_hour)
-    if user_limit is not None:
-        return user_limit
+def effective_refresh_limit(user: Optional["ManagedUser"], group: "ConfigGroup") -> int:
+    if user is not None:
+        user_limit = _positive_int_or_none(user.refresh_limit_per_hour)
+        if user_limit is not None:
+            return user_limit
     group_limit = _positive_int_or_none(group.refresh_limit_per_hour)
     if group_limit is not None:
         return group_limit

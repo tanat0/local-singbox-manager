@@ -118,4 +118,5 @@ Telegram support has two independent uses:
 
 The bot routes admin and user commands through the same service/deploy/user
 distribution logic used by the web UI. Handlers format Telegram responses but
-do not duplicate sing-box config generation.
+do not duplicate sing-box config generation. Operator downloads of generated
+JSON and `.sbclient` files use the same assignment and document builders.

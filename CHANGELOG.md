@@ -16,6 +16,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Managed-user delivery can now attach `.sbclient` bundles for the local
   `singbox-client` app through a separate `/sbclient` Telegram command, without
   adding a client sync API.
+- Operator web download of generated sing-box JSON and `.sbclient` bundles from
+  the Users page, using the same assignment and document builders as Telegram
+  delivery.
 - Local quality gates: check-only git hooks, `make check-fast`, `make check`,
   and `make doctor`.
 

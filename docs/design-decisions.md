@@ -94,6 +94,10 @@ bundle. That bundle is delivered through a separate `/sbclient` command instead
 of replacing `/config`, because generic sing-box JSON and `.sbclient` serve
 different clients.
 
+The Users page can download the same generated JSON and `.sbclient` files for
+operator testing. This is a local authenticated export, not a client sync
+endpoint.
+
 Reason:
 
 - raw URLs are the format already stored by the app

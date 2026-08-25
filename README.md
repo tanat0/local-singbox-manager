@@ -44,7 +44,8 @@ control plane, and no remote exposure by default.
 - Store managed Telegram users and groups.
 - Generate user-specific sing-box config files, `.sbclient` bundles, and raw-link
   fallbacks from selected nodes.
-- Send config updates through Telegram.
+- Send config updates through Telegram, or download the same artifacts from the
+  Users page.
 - Track group versions, deterministic config fingerprints, delivery attempts,
   and refresh limits.
 - Reduce manual support for family or friend devices.
@@ -168,6 +169,8 @@ root.
 More detail:
 
 - [docs/architecture.md](docs/architecture.md)
+- [docs/ecosystem.md](docs/ecosystem.md)
+- [docs/client-contract.md](docs/client-contract.md)
 - [docs/design-decisions.md](docs/design-decisions.md)
 - [docs/recovery.md](docs/recovery.md)
 - [docs/roadmap.md](docs/roadmap.md)
