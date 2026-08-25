@@ -25,6 +25,7 @@ async def nodes_page(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse(request, "nodes.html", {
         "nodes": node_service.list_nodes_for_dashboard(db),
         "latest_logs": node_service.latest_deploy_logs(db),
+        "topology_role_choices": node_service.TOPOLOGY_ROLE_CHOICES,
         "msg": request.query_params.get("msg", ""),
         "msg_type": request.query_params.get("msg_type", "info"),
     })
@@ -47,6 +48,7 @@ async def update_node_metadata(
     country_name: Annotated[str, Form()] = "",
     provider_name: Annotated[str, Form()] = "",
     notes: Annotated[str, Form()] = "",
+    topology_role: Annotated[str, Form()] = "",
     db: Session = Depends(get_db),
 ):
     data = NodeMetadataInput(
@@ -54,6 +56,7 @@ async def update_node_metadata(
         country_name=country_name,
         provider_name=provider_name,
         notes=notes,
+        topology_role=topology_role,
     )
     return _nodes_redirect(node_service.update_node_metadata(db, node_id, data))
 

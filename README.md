@@ -171,6 +171,7 @@ More detail:
 - [docs/architecture.md](docs/architecture.md)
 - [docs/ecosystem.md](docs/ecosystem.md)
 - [docs/client-contract.md](docs/client-contract.md)
+- [docs/topology.md](docs/topology.md)
 - [docs/design-decisions.md](docs/design-decisions.md)
 - [docs/recovery.md](docs/recovery.md)
 - [docs/roadmap.md](docs/roadmap.md)

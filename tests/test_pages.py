@@ -299,3 +299,89 @@ def test_users_download_redirects_when_transport_is_unsupported(client):
     assert response.status_code == 200
     assert b"XHTTP" in response.content
     assert b"vless://" not in response.content
+
+
+def _node_id(tag: str) -> int:
+    db = SessionLocal()
+    try:
+        return db.query(Node).filter(Node.tag == tag).one().id
+    finally:
+        db.close()
+
+
+def test_nodes_page_renders_topology_role_select(client):
+    suffix = uuid.uuid4().hex[:8]
+    _ensure_node(
+        "vless://12345678-abcd-0000-0000-000000000002@1.2.3.4:443"
+        "?security=reality&sni=example.com&pbk=fakepubkey&sid=aabbcc&fp=chrome&type=tcp"
+        f"#page-role-select-{suffix}"
+    )
+    response = client.get("/nodes")
+    assert response.status_code == 200
+    assert b"Entry relay" in response.content
+    assert b"Upstream exit" in response.content
+
+
+def test_nodes_save_topology_role(client):
+    suffix = uuid.uuid4().hex[:8]
+    tag = _ensure_node(
+        "vless://12345678-abcd-0000-0000-000000000002@1.2.3.4:443"
+        "?security=reality&sni=example.com&pbk=fakepubkey&sid=aabbcc&fp=chrome&type=tcp"
+        f"#page-role-{suffix}"
+    )
+    node_id = _node_id(tag)
+
+    response = client.post(f"/nodes/{node_id}/metadata", data={
+        "country_code": "",
+        "country_name": "",
+        "provider_name": "",
+        "notes": "",
+        "topology_role": "entry_relay",
+    }, follow_redirects=True)
+
+    assert response.status_code == 200
+    assert b"Updated metadata" in response.content
+    assert b"entry relay" in response.content
+    payload = json.loads(client.get("/api/nodes/export").content)
+    exported = next(item for item in payload if item["tag"] == tag)
+    assert exported["topology_role"] == "entry_relay"
+
+
+def test_nodes_reject_invalid_topology_role(client):
+    suffix = uuid.uuid4().hex[:8]
+    tag = _ensure_node(
+        "vless://12345678-abcd-0000-0000-000000000002@1.2.3.4:443"
+        "?security=reality&sni=example.com&pbk=fakepubkey&sid=aabbcc&fp=chrome&type=tcp"
+        f"#page-role-bad-{suffix}"
+    )
+    node_id = _node_id(tag)
+
+    response = client.post(f"/nodes/{node_id}/metadata", data={
+        "topology_role": "panel",
+    }, follow_redirects=True)
+
+    assert response.status_code == 200
+    assert b"Invalid topology role" in response.content
+    payload = json.loads(client.get("/api/nodes/export").content)
+    exported = next(item for item in payload if item["tag"] == tag)
+    assert exported["topology_role"] is None
+
+
+def test_nodes_import_roundtrip_topology_role(client):
+    suffix = uuid.uuid4().hex[:8]
+    tag = _ensure_node(
+        "vless://12345678-abcd-0000-0000-000000000002@1.2.3.4:443"
+        "?security=reality&sni=example.com&pbk=fakepubkey&sid=aabbcc&fp=chrome&type=tcp"
+        f"#page-role-import-{suffix}"
+    )
+    node_id = _node_id(tag)
+    client.post(f"/nodes/{node_id}/metadata", data={"topology_role": "upstream_exit"}, follow_redirects=True)
+    export_json = client.get("/api/nodes/export").content.decode("utf-8")
+
+    response = client.post("/api/nodes/import", data={"nodes_json": export_json}, follow_redirects=True)
+
+    assert response.status_code == 200
+    assert b"Imported" in response.content
+    payload = json.loads(client.get("/api/nodes/export").content)
+    exported = next(item for item in payload if item["tag"] == tag)
+    assert exported["topology_role"] == "upstream_exit"

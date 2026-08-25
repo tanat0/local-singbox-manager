@@ -44,7 +44,8 @@ Alembic migrations under `migrations/versions`.
 
 Core tables:
 
-- `nodes`: parsed proxy node source data and metadata
+- `nodes`: parsed proxy node source data and metadata, including optional
+  topology role labels
 - `settings`: simple key/value settings
 - `profiles`: named node plus DNS/route preset combinations
 - `deploy_log`: deploy attempt audit trail

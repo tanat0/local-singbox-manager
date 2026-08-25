@@ -21,6 +21,8 @@ class Node(Base):
     provider_name = Column(String, nullable=True)
     provider_suggestion = Column(String, nullable=True)
     notes = Column(Text, nullable=True)
+    # Operator inventory label only: entry_relay, upstream_exit, or unset.
+    topology_role = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

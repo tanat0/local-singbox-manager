@@ -37,9 +37,10 @@ commands, or operator-only diagnostics.
 
 ### 3x-ui Relay Host
 
-A RU 3x-ui host can be part of the topology as a relay entry. In the first pass,
-the manager treats exported 3x-ui links as ordinary imported nodes and documents
-the topology manually.
+A RU 3x-ui host can be part of the topology as a relay entry. Exported 3x-ui
+links are ordinary imported nodes. Optional `topology_role` labels mark which
+stored links are entry relays and which are upstream exits. See
+[topology.md](topology.md).
 
 Initial model:
 
@@ -77,8 +78,9 @@ better fit than a premature library.
    from the Users page.
 4. `singbox-client` imports the `.sbclient` bundle and generates platform-local
    sing-box config from the raw URLs.
-5. 3x-ui relay links, when used, are treated as normal imported nodes until a
-   specific manual workflow needs dedicated metadata.
+5. 3x-ui relay links are imported as normal nodes. Mark them `entry_relay` or
+   `upstream_exit` when that helps you keep the inventory straight. Put the
+   entry relay in the managed group that users should receive.
 
 ## Coordination Rules
 
@@ -88,5 +90,5 @@ better fit than a premature library.
   document the gap.
 - Keep raw URL fallback available until real Windows and Android import testing
   proves the generated artifacts are usable.
-- Keep topology metadata descriptive first. Add automation only after the manual
-  workflow is clear.
+- Keep topology metadata descriptive. `topology_role` does not drive generation
+  or delivery. Add 3x-ui automation only after the manual workflow is clear.

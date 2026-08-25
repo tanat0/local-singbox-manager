@@ -26,6 +26,11 @@ features.
   `singbox-client` app through `/sbclient`.
 - Operator web download of generated sing-box JSON and `.sbclient` bundles from
   the Users page.
+- Optional node `topology_role` labels for manual relay versus upstream
+  inventory.
+- Read-only operations smoke check via `make ops-check`.
+- Disaster-recovery notes for database dump, `.env`, helper backups, and
+  rollback failure.
 - VLESS transport compatibility for generated configs: HTTP/H2, gRPC,
   WebSocket, and HTTPUpgrade are mapped to sing-box `transport` objects; known
   unsupported modes fail explicitly instead of producing invalid JSON.
@@ -56,21 +61,16 @@ features.
 
 ## 1.5 Operations Hardening
 
-- Add a smoke command for helper install, sudoers, sing-box binary, and systemd
-  service state without modifying deployed config.
-- Add disaster-recovery export notes for DB dump, `.env.example`, rendered
-  service/sudoers examples, and current generated config metadata.
-- Improve manual restore documentation for rollback failure cases.
 - Continue splitting broad tests or service modules only when feature work makes
   the current shape harder to maintain.
 
 ## 1.6 3x-ui Relay Topology
 
-- Document the first supported relay topology as manual inventory:
+- Keep [docs/topology.md](topology.md) aligned with the manual inventory:
   client or managed user config -> RU 3x-ui inbound -> upstream nodes.
-- Add node/topology metadata only if it helps the operator understand which
-  stored links are entry relays and which are upstream exits.
-- Treat exported 3x-ui links as ordinary imported nodes in the first pass.
+- Use `topology_role` only as an operator label for entry relays and upstream
+  exits. Do not let it change generation or delivery.
+- Treat exported 3x-ui links as ordinary imported nodes.
 - Do not store 3x-ui panel credentials or call the 3x-ui API until there is a
   concrete operation that cannot be handled by manual import/export.
 

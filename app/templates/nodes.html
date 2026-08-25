@@ -49,6 +49,11 @@ hysteria2://password@host:port?sni=HOST#tag" required></textarea>
           {% else %}
             <span class="badge badge-gray">inactive</span>
           {% endif %}
+          {% if node.topology_role == 'entry_relay' %}
+            <span class="badge badge-blue">entry relay</span>
+          {% elif node.topology_role == 'upstream_exit' %}
+            <span class="badge badge-gray">upstream exit</span>
+          {% endif %}
           <div class="text-dim">{{ parsed.server }}:{{ parsed.port }}</div>
         </td>
         <td>
@@ -61,6 +66,11 @@ hysteria2://password@host:port?sni=HOST#tag" required></textarea>
             {% if node.provider_suggestion %}
               <div class="text-dim">Suggestion: {{ node.provider_suggestion }}</div>
             {% endif %}
+            <select name="topology_role">
+              {% for value, label in topology_role_choices %}
+              <option value="{{ value }}" {% if (node.topology_role or '') == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
             <textarea name="notes" rows="2" placeholder="Notes">{{ node.notes or '' }}</textarea>
             <button type="submit" class="btn btn-outline btn-sm">Save</button>
           </form>

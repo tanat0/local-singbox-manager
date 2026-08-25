@@ -28,6 +28,13 @@ recovery from `/etc/sing-box/backups`.
 `reload` is not used for deploys because TUN configs can fail on reload while
 the old interface is still open.
 
+## Relay Topology Labels
+
+Nodes can carry an optional `topology_role` of `entry_relay` or `upstream_exit`.
+The label is operator inventory only. It does not change deploy, generated
+JSON, Telegram attachments, or group membership. See
+[Relay Topology](topology.md).
+
 ## VLESS Transports
 
 Generated sing-box configs support these VLESS URL transport values:

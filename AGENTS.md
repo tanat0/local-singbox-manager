@@ -27,8 +27,9 @@ application and not as a hosted VPN panel.
 - Do not add a hosted sync API, public control plane, device binding, or remote
   kill switch without an explicit design change.
 - Do not store 3x-ui panel credentials or call the 3x-ui API in the first relay
-  topology pass. Treat exported 3x-ui links as imported nodes until a concrete
-  operator workflow requires more.
+  topology pass. Treat exported 3x-ui links as imported nodes. Optional
+  `topology_role` labels (`entry_relay`, `upstream_exit`) are operator inventory
+  only; see `docs/topology.md`.
 
 ## Shared Contract
 
@@ -42,8 +43,9 @@ application and not as a hosted VPN panel.
 
 ## Change Rules
 
-- Keep `README.md`, `docs/ecosystem.md`, `docs/client-contract.md`, and
-  `docs/roadmap.md` aligned when changing user delivery or topology behavior.
+- Keep `README.md`, `docs/ecosystem.md`, `docs/client-contract.md`,
+  `docs/topology.md`, and `docs/roadmap.md` aligned when changing user delivery
+  or topology behavior.
 - Add focused tests for routing, Telegram delivery, config generation, deploy,
   auth, and migration changes.
 - Do not log raw URLs, generated configs, `.sbclient` payloads, Telegram tokens,

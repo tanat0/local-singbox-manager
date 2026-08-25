@@ -19,6 +19,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Operator web download of generated sing-box JSON and `.sbclient` bundles from
   the Users page, using the same assignment and document builders as Telegram
   delivery.
+- Optional node `topology_role` labels (`entry_relay`, `upstream_exit`) for
+  manual 3x-ui relay inventory, without panel credentials or API calls.
 - Local quality gates: check-only git hooks, `make check-fast`, `make check`,
   and `make doctor`.
 

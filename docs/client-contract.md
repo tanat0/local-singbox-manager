@@ -95,3 +95,5 @@ All delivered artifacts contain proxy credentials.
 - Remote revocation of already delivered credentials.
 - Server-side traffic enforcement for client devices.
 - 3x-ui panel automation.
+- Node `topology_role` labels. Those are operator inventory in this repo, not
+  part of the client import contract.
