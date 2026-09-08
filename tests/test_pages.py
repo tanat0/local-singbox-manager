@@ -51,6 +51,7 @@ from app.db import SessionLocal  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import ConfigGroup, Node  # noqa: E402
 from app.parsers import parse_url  # noqa: E402
+from app.system_clients import CommandResult  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -90,12 +91,35 @@ def _ensure_node(raw_url: str) -> str:
         ("/users", b"Users"),
         ("/diagnostics", b"Diagnostics"),
         ("/backups", b"Backups"),
+        ("/apps", b"App Bypass"),
+        ("/servers", b"Servers"),
     ],
 )
 def test_page_renders(client, path, needle):
     response = client.get(path)
     assert response.status_code == 200
     assert needle in response.content
+
+
+def test_apps_save_custom_process_and_icon_placeholder(client):
+    response = client.post("/apps", data={"custom_processes": "telegram-desktop"}, follow_redirects=True)
+    assert response.status_code == 200
+    assert b"Saved 1 bypass entries" in response.content
+    icon = client.get("/apps/icon", params={"app_id": "not-valid"})
+    assert icon.status_code == 200
+    assert icon.headers["content-type"].startswith("image/svg+xml")
+
+
+def test_servers_notes_and_mocked_probe(client):
+    response = client.post("/servers/notes", data={"notes_hykz": "kz exit"}, follow_redirects=True)
+    assert response.status_code == 200
+    assert b"Notes saved" in response.content
+    payload = '{"hostname":"kz","units":["hysteria-server.service"],"listen":["udp *:443"],"journal_err_24h":"1"}'
+    with patch("app.services.servers._ssh_python", return_value=CommandResult(True, payload, 0)):
+        probe = client.get("/servers/hykz/probe")
+    assert probe.status_code == 200
+    assert b"reachable" in probe.content
+    assert b"hysteria-server.service" in probe.content
 
 
 def test_health_and_version_probes(client):

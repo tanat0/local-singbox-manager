@@ -44,6 +44,10 @@ Config groups are still chosen by hand. Managed users usually receive the
 
 Keep notes and country/provider fields for anything the role does not capture.
 
+The Servers page can probe the operator's SSH aliases (`hykz`, `aeza`, `swvps`,
+`ge_vps`) for reachability, units, and listen ports. It does not open 3x-ui
+databases or print remote credentials.
+
 ## Out Of Scope
 
 - storing 3x-ui panel credentials

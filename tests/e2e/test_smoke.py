@@ -46,7 +46,7 @@ def test_dashboard_title(page: Page, base_url: str):
 def test_dashboard_has_nav(page: Page, base_url: str):
     page.goto(base_url + "/")
     nav = page.locator("nav")
-    for label in ("Dashboard", "Nodes", "Logs", "Backups", "Settings"):
+    for label in ("Dashboard", "Nodes", "Apps", "Servers", "Logs", "Backups", "Settings"):
         expect(nav.get_by_role("link", name=label, exact=True)).to_be_visible()
 
 
@@ -71,6 +71,18 @@ def test_settings_page_loads(page: Page, base_url: str):
     expect(page).to_have_title("Settings — Sing-Box Manager")
     expect(page.locator("select[name='dns_preset']")).to_be_visible()
     expect(page.locator("select[name='route_preset']")).to_be_visible()
+
+
+def test_apps_page_loads(page: Page, base_url: str):
+    page.goto(base_url + "/apps")
+    expect(page).to_have_title("Apps — Sing-Box Manager")
+    expect(page.locator("#app-grid")).to_be_visible()
+
+
+def test_servers_page_loads(page: Page, base_url: str):
+    page.goto(base_url + "/servers")
+    expect(page).to_have_title("Servers — Sing-Box Manager")
+    expect(page.get_by_text("hykz", exact=True)).to_be_visible()
 
 
 def test_diagnostics_page_loads(page: Page, base_url: str):
@@ -233,6 +245,8 @@ def test_api_logs_line_clamp(page: Page, base_url: str):
     ("/",            "Dashboard"),
     ("/nodes",       "Nodes"),
     ("/profiles",    "Profiles"),
+    ("/apps",        "Apps"),
+    ("/servers",     "Servers"),
     ("/diagnostics", "Diagnostics"),
     ("/logs",        "Logs"),
     ("/backups",     "Backups"),

@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Apps — Sing-Box Manager{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>App Bypass</h1>
+  <span class="text-dim">Linux host TUN only. Selected apps go <code>direct</code>.</span>
+</div>
+
+{% if msg %}
+<div class="alert alert-{{ msg_type }}">{{ msg }}</div>
+{% endif %}
+
+<div class="card">
+  <p class="text-dim section-note">
+    This list is the applications installed on <strong>this</strong> machine.
+    Flatpak/Electron/Steam names can be wrong — edit the process field or add a
+    custom process name. Windows/Android exclusions are out of scope here.
+    Changes apply on the next node activation.
+  </p>
+  <form method="post" action="/apps" id="app-bypass-form">
+    <div class="form-group">
+      <label for="app-filter">Filter</label>
+      <input id="app-filter" type="search" placeholder="Name or process…" autocomplete="off">
+    </div>
+    <p class="text-dim">Selected: <strong id="selected-count">{{ selected_count }}</strong></p>
+    <div class="app-grid" id="app-grid">
+      {% for app in apps %}
+      <label class="app-tile" data-name="{{ app.name|lower }} {{ app.process_name|lower }}">
+        <input type="checkbox" name="app_ids" value="{{ app.app_id }}"
+               {% if app.app_id in selected_ids %}checked{% endif %}>
+        <img class="app-icon" src="/apps/icon?app_id={{ app.app_id|urlencode }}" alt="" width="32" height="32">
+        <span class="app-meta">
+          <strong>{{ app.name }}</strong>
+          <input class="app-process" name="process-{{ app.app_id }}"
+                 value="{{ overrides.get(app.app_id, app.process_name) }}"
+                 placeholder="process name" title="Override process_name when Exec is not the real process">
+          {% if app.process_path %}
+          <span class="text-dim app-path">{{ app.process_path }}</span>
+          {% endif %}
+        </span>
+      </label>
+      {% endfor %}
+      {% if not apps %}
+      <div class="text-dim">No .desktop applications found.</div>
+      {% endif %}
+    </div>
+    <div class="form-group mt-lg">
+      <label>Custom process names</label>
+      <textarea name="custom_processes" rows="4" placeholder="one process name per line">{{ custom_text }}</textarea>
+      <p class="text-dim">Use this when the icon list cannot map Exec to <code>/proc/pid/comm</code>.</p>
+    </div>
+    <button type="submit" class="btn btn-primary">Save bypass list</button>
+  </form>
+</div>
+
+<script>
+(function() {
+  var filter = document.getElementById('app-filter');
+  var grid = document.getElementById('app-grid');
+  if (!filter || !grid) return;
+  filter.addEventListener('input', function() {
+    var q = filter.value.toLowerCase();
+    grid.querySelectorAll('.app-tile').forEach(function(tile) {
+      tile.hidden = q && (tile.dataset.name || '').indexOf(q) === -1;
+    });
+  });
+})();
+</script>
+
+{% endblock %}

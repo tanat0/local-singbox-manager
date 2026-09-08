@@ -14,6 +14,7 @@ browser on localhost
      -> sudo helper for config deploy/restore/service control
      -> optional notification clients
      -> optional Telegram long-polling bot
+     -> optional ssh to a named alias allowlist
 ```
 
 The app process should run as a normal user. It does not need root access
@@ -46,7 +47,8 @@ Core tables:
 
 - `nodes`: parsed proxy node source data and metadata, including optional
   topology role labels
-- `settings`: simple key/value settings
+- `settings`: key/value including DNS/route presets, `app_bypass_json`, and
+  `server_notes_json`
 - `profiles`: named node plus DNS/route preset combinations
 - `deploy_log`: deploy attempt audit trail
 - `health_check_log`: background health samples

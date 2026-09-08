@@ -8,6 +8,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Linux App Bypass page: installed `.desktop` apps with icons, checkboxes, and
+  host-only `process_name` / `process_path` → `direct` rules.
+- Servers page: SSH inventory for `hykz`, `aeza`, `swvps`, and `ge_vps` with
+  non-secret probes. No 3x-ui API and no remote credential display.
 - User distribution hardening: selectable node assignments, config versions,
   deterministic fingerprints, refresh limits, delivery log visibility, and
   best-effort Telegram notifications when assigned configs change.
@@ -25,6 +29,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and `make doctor`.
 
 ### Changed
+- DNS presets send DoT through the `direct` outbound so resolver traffic does
+  not depend on the proxy tunnel.
+- Generated TUN inbound MTU is `1400` instead of `1500`.
 - Background health and Telegram polling can be disabled for tests with
   `BACKGROUND_TASKS_ENABLED=0`.
 - Unit tests now use an isolated temp database by default instead of the local

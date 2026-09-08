@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
-from typing import Any, Optional
+from typing import Any, Mapping, Optional, Sequence
 
 from app.parsers.base import ParsedNode
 from app.parsers.hysteria2 import Hysteria2Node
@@ -144,6 +144,7 @@ def generate_config(
     dns_preset: str = DEFAULT_DNS_PRESET,
     route_preset: str = DEFAULT_ROUTE_PRESET,
     log_level: str = "warn",
+    process_bypass: Optional[Mapping[str, Sequence[str]]] = None,
 ) -> dict[str, Any]:
     if dns_preset not in DNS_PRESETS:
         raise ValueError(f"Unknown DNS preset: {dns_preset!r}")
@@ -152,7 +153,7 @@ def generate_config(
 
     active = build_outbound(node)
 
-    route = build_route_config(route_preset)
+    route = build_route_config(route_preset, process_bypass=process_bypass)
     route["final"] = active["tag"]
 
     if log_level not in {"error", "warn", "info", "debug"}:

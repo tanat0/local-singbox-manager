@@ -22,7 +22,12 @@ The generated JSON includes:
 - `direct` and `block` outbounds;
 - selected group route preset;
 - always-on route guards;
+- DNS servers with `detour: direct`;
+- TUN inbound MTU `1400`;
 - a `selector` outbound named `proxy` when the group has multiple nodes.
+
+Host-only Linux `process_name` / `process_path` bypass is not included in this
+artifact.
 
 This artifact is not a `.sbclient` bundle.
 

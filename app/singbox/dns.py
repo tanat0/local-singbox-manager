@@ -10,7 +10,13 @@ DNS_PRESETS: dict[str, dict[str, Any]] = {
         "label": "Quad9 (DoT)",
         "description": "Privacy-focused, blocks malware domains",
         "config": {
-            "servers": [{"type": "tls", "tag": "quad9", "server": "9.9.9.9", "server_port": 853}],
+            "servers": [{
+                "type": "tls",
+                "tag": "quad9",
+                "server": "9.9.9.9",
+                "server_port": 853,
+                "detour": "direct",
+            }],
             "final": "quad9",
         },
     },
@@ -18,7 +24,13 @@ DNS_PRESETS: dict[str, dict[str, Any]] = {
         "label": "Cloudflare (DoT)",
         "description": "Fast global resolver",
         "config": {
-            "servers": [{"type": "tls", "tag": "cf", "server": "1.1.1.1", "server_port": 853}],
+            "servers": [{
+                "type": "tls",
+                "tag": "cf",
+                "server": "1.1.1.1",
+                "server_port": 853,
+                "detour": "direct",
+            }],
             "final": "cf",
         },
     },
@@ -26,7 +38,13 @@ DNS_PRESETS: dict[str, dict[str, Any]] = {
         "label": "Google (DoT)",
         "description": "Google Public DNS over TLS",
         "config": {
-            "servers": [{"type": "tls", "tag": "google", "server": "8.8.8.8", "server_port": 853}],
+            "servers": [{
+                "type": "tls",
+                "tag": "google",
+                "server": "8.8.8.8",
+                "server_port": 853,
+                "detour": "direct",
+            }],
             "final": "google",
         },
     },

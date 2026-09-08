@@ -1,0 +1,33 @@
+{% if server.reachable %}
+  <p><span class="badge badge-green">reachable</span>
+     <span class="text-dim">{{ server.hostname }} · {{ server.uptime }}</span></p>
+  {% if server.load %}
+  <p class="text-dim">load {{ server.load | join(" ") }}</p>
+  {% endif %}
+  {% if server.units %}
+  <p>Units: {% for unit in server.units %}<code>{{ unit }}</code> {% endfor %}</p>
+  {% endif %}
+  {% if server.listen %}
+  <p class="text-dim">Listen: {{ server.listen | join(", ") }}</p>
+  {% endif %}
+  {% if server.hysteria %}
+  <p>Hysteria listen <code>{{ server.hysteria.listen or "—" }}</code>
+     bandwidth {{ server.hysteria.bandwidth_up or "—" }} / {{ server.hysteria.bandwidth_down or "—" }}
+     {% if server.hysteria.ignore_client_bandwidth %}· ignoreClientBandwidth{% endif %}
+     {% if server.hysteria.has_obfs %}· obfs set{% endif %}
+  </p>
+  {% endif %}
+  {% if server.nstat %}
+  <p class="text-dim">
+    UDP sndbuf err {{ server.nstat.get("UdpSndbufErrors", "—") }},
+    UDP in err {{ server.nstat.get("UdpInErrors", "—") }},
+    TCP retrans {{ server.nstat.get("TcpRetransSegs", "—") }}
+  </p>
+  {% endif %}
+  {% if server.journal_err_24h is not none %}
+  <p class="text-dim">journal err lines (24h): {{ server.journal_err_24h }}</p>
+  {% endif %}
+{% else %}
+  <p><span class="badge badge-red">unreachable</span>
+     <span class="text-dim">{{ server.error }}</span></p>
+{% endif %}

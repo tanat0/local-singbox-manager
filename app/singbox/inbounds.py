@@ -8,7 +8,7 @@ _TUN_INBOUND: dict[str, Any] = {
     "tag": "tun-in",
     "interface_name": "singtun0",
     "address": ["172.19.0.1/30"],
-    "mtu": 1500,
+    "mtu": 1400,
     "auto_route": True,
     "strict_route": True,
     "auto_redirect": True,

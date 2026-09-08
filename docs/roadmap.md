@@ -9,8 +9,12 @@ features.
 - Local FastAPI web UI for a single Linux host running sing-box.
 - Node parsing for VLESS and Hysteria2/Hy2 URLs.
 - Config generation from stored node data plus DNS and route presets.
+- DNS presets send DoT through the `direct` outbound.
+- TUN inbound MTU `1400`.
 - Always-on route guards for generated TUN configs: selected domains are
   blocked and basic RU destinations go direct.
+- Linux host per-app TUN bypass from installed `.desktop` entries.
+- SSH inventory page for a small named host list, without 3x-ui API access.
 - Deploy pipeline with validation, helper-based config replacement, restart,
   lightweight health check, backup, rollback, and deploy logs.
 - Profiles for node plus DNS/route preset combinations.
@@ -74,10 +78,17 @@ features.
 - Do not store 3x-ui panel credentials or call the 3x-ui API until there is a
   concrete operation that cannot be handled by manual import/export.
 
+## 1.7 Remote Host Knobs
+
+- Use the Servers SSH inventory to edit non-secret remote knobs (Hysteria
+  bandwidth, UDP buffer sysctls) with an explicit preview.
+- Keep 3x-ui as imported nodes only. Do not open panel databases or print
+  credentials.
+
 ## Non-Goals
 
 - Hosted multi-tenant control plane.
-- General remote server fleet management.
+- Generic remote fleet / Ansible replacement.
 - Server-side bandwidth accounting or traffic enforcement.
 - Device binding.
 - Reliable remote kill-switch for distributed client configs.

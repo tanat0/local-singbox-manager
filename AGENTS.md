@@ -15,8 +15,8 @@ application and not as a hosted VPN panel.
   - `.sbclient` bundles for the companion `singbox-client` project.
 - Operators can also download the same generated JSON and `.sbclient` files
   from the Users page.
-- Keep local observability, diagnostics, deploy history, rollback, and helper
-  checks in this repo.
+- Keep local observability, diagnostics, deploy history, rollback, helper
+  checks, Linux app TUN bypass, and SSH inventory for a small named host list.
 
 ## Boundaries
 
@@ -26,10 +26,15 @@ application and not as a hosted VPN panel.
   become a demonstrated maintenance problem.
 - Do not add a hosted sync API, public control plane, device binding, or remote
   kill switch without an explicit design change.
-- Do not store 3x-ui panel credentials or call the 3x-ui API in the first relay
-  topology pass. Treat exported 3x-ui links as imported nodes. Optional
-  `topology_role` labels (`entry_relay`, `upstream_exit`) are operator inventory
-  only; see `docs/topology.md`.
+- Do not store 3x-ui panel credentials or call the 3x-ui API. Treat exported
+  3x-ui links as imported nodes. Optional `topology_role` labels
+  (`entry_relay`, `upstream_exit`) are operator inventory only; see
+  `docs/topology.md`.
+- Linux app bypass (`process_name` / `process_path` → `direct`) is host TUN
+  policy only. Do not copy it into generated client JSON or `.sbclient`.
+- The Servers page may SSH to a fixed alias allowlist using the operator's
+  local `~/.ssh/config`. Probe output must stay non-secret (units, listen
+  ports, bandwidth numbers). Do not print or store remote credentials.
 
 ## Shared Contract
 

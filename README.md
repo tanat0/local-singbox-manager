@@ -54,6 +54,8 @@ control plane, and no remote exposure by default.
 
 - Local diagnostics pages for logs, service state, health checks, and latency
   history.
+- Linux per-app TUN bypass from installed `.desktop` entries on this host.
+- SSH inventory for a small named host list (`hykz`, `aeza`, `swvps`, `ge_vps`).
 - Optional single-admin web auth with signed cookies and basic CSRF checks.
 - Optional notifications through `notify-send`, Telegram, and ntfy.sh.
 - Optional Telegram admin bot for status, logs, node listing, and activation.
@@ -75,7 +77,9 @@ This project is not:
   actual VPN usage server-side.
 - Telegram notifications and desktop notifications are best effort.
 - Device binding, bandwidth accounting, server-side session control, MTProto,
-  and multi-server management are not implemented.
+  and generic fleet/Ansible management are not implemented.
+- The Servers page can probe a fixed SSH alias list. It does not call 3x-ui
+  or edit remote protocol configs yet.
 - The app targets Linux hosts with `systemd`, `sudo`, and a local sing-box
   service.
 

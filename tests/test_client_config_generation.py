@@ -32,6 +32,9 @@ def test_client_config_includes_route_guards():
     assert rules[0] == {"port": 53, "action": "hijack-dns"}
     assert any("api.ipify.org" in rule.get("domain", []) and rule["outbound"] == "block" for rule in rules)
     assert any("gosuslugi.ru" in rule.get("domain", []) and rule["outbound"] == "direct" for rule in rules)
+    assert all("process_name" not in rule and "process_path" not in rule for rule in rules)
+    assert cfg["dns"]["servers"][0]["detour"] == "direct"
+    assert cfg["inbounds"][0]["mtu"] == 1400
 
 
 def test_client_config_multi_node_uses_selector():

@@ -124,7 +124,15 @@ def test_tun_inbound():
     assert tun is not None
     assert tun["auto_route"] is True
     assert tun["stack"] == "gvisor"
+    assert tun["mtu"] == 1400
     assert {i["type"] for i in cfg["inbounds"]} == {"tun"}
+
+
+def test_dns_servers_use_direct_detour():
+    cfg = generate_config(parse_vless(VLESS_URL))
+    server = cfg["dns"]["servers"][0]
+    assert server["detour"] == "direct"
+    assert server["type"] == "tls"
 
 
 def test_dns_hijack_rule():

@@ -67,9 +67,16 @@ DNS presets:
 
 | Preset | Resolver |
 | --- | --- |
-| `quad9_tls` | 9.9.9.9 over DoT |
-| `cloudflare_tls` | 1.1.1.1 over DoT |
-| `google_tls` | 8.8.8.8 over DoT |
+| `quad9_tls` | 9.9.9.9 over DoT, `detour: direct` |
+| `cloudflare_tls` | 1.1.1.1 over DoT, `detour: direct` |
+| `google_tls` | 8.8.8.8 over DoT, `detour: direct` |
+
+DoT is sent out the `direct` outbound so DNS does not depend on the proxy
+tunnel. If a local ISP blocks DoT, switch presets or expect resolve failures
+without the tunnel.
+
+The generated TUN inbound uses MTU `1400` (not 1500) to reduce QUIC/Hysteria2
+fragmentation stalls.
 
 Route presets:
 
@@ -94,6 +101,11 @@ before preset-specific rules:
   and `wtfismyip.com` use the `block` outbound
 - `.ru`, `.su`, and `gosuslugi.ru` use the `direct` outbound
 
+On the managed Linux host only, the Apps page can add `process_name` /
+`process_path` rules to `direct`. Those rules are placed before DNS hijack so
+excluded apps keep their own DNS. They are not copied into generated client
+JSON or `.sbclient` bundles.
+
 This is local routing policy for the generated TUN config. It is not
 server-side enforcement and it does not affect clients that imported a raw
 proxy URL.
@@ -108,6 +120,8 @@ diagnostics and re-activate a node after changing the setting.
 - Logs page can show all logs, warnings/errors, fatal/error, and text grep.
 - Diagnostics page runs live checks and shows recent latency history from the
   SQLite health log.
+- Apps page lists local `.desktop` applications for host TUN process bypass.
+- Servers page probes named SSH aliases without reading remote secrets.
 - Problem Digest groups recent sing-box DNS and connection errors by target and
   normalized reason. It is a triage view; raw logs remain the source of truth.
 
@@ -117,7 +131,7 @@ Common Problem Digest reasons:
 | --- | --- | --- |
 | `dns response EOF` | The configured DNS upstream closed the exchange before a usable answer arrived. | Check Diagnostics, try another DNS preset, then re-activate the node/profile. |
 | `remote dial timeout` | The selected outbound or remote server could not connect to the target IP/port before timeout. | Check whether the site/app is reachable later, compare another node, and inspect raw logs for the target. |
-| `stream canceled by remote` | The remote side canceled an existing stream. Occasional entries can be normal client/server churn. | Investigate only when counts grow with visible connectivity problems. |
+| `stream canceled by remote` | The remote side canceled an existing stream. Frequent Hysteria2/QUIC cancels often mean UDP loss, server send-buffer pressure, or a server bandwidth cap. | Check Servers probe UDP errors and Hysteria bandwidth; compare a TCP VLESS node. |
 
 Health checks:
 

@@ -12,8 +12,10 @@ This repository is the admin/operator tool.
 It owns:
 
 - local node, profile, group, user, and delivery-log state;
-- generated sing-box config for the managed Linux host;
-- deploy, rollback, diagnostics, and helper checks;
+- generated sing-box config for the managed Linux host, including optional
+  per-app TUN bypass;
+- deploy, rollback, diagnostics, helper checks, and SSH inventory for a small
+  named operator host list;
 - Telegram delivery of raw links, generic sing-box JSON, and `.sbclient`
   bundles.
 
@@ -54,6 +56,9 @@ Out of scope for now:
 - calling the 3x-ui API;
 - managing upstream server inventory through the panel;
 - claiming server-side enforcement for already distributed client credentials.
+
+The Servers page can SSH to named operator hosts and read non-secret service
+state. That is not a 3x-ui control plane.
 
 ## Shared Surface
 
