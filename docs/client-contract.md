@@ -22,7 +22,7 @@ The generated JSON includes:
 - `direct` and `block` outbounds;
 - selected group route preset;
 - always-on route guards;
-- DNS servers with `detour: direct`;
+- TLS DNS servers using the native direct dialer, with no `detour`;
 - TUN inbound MTU `1400`;
 - a `selector` outbound named `proxy` when the group has multiple nodes.
 

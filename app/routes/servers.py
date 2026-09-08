@@ -8,6 +8,7 @@ except ImportError:
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.db import get_db
 from app.routes.common import redirect
@@ -43,11 +44,11 @@ async def save_server_notes(
     return redirect("/servers", msg="Notes saved.", msg_type="success")
 
 
-@router.get("/servers/{alias}/probe", response_class=HTMLResponse)
+@router.post("/servers/{alias}/probe", response_class=HTMLResponse)
 async def probe_one_server(request: Request, alias: str, db: Session = Depends(get_db)):
     if alias not in ALLOWED_ALIASES:
         return HTMLResponse('<p class="text-dim">Unknown SSH alias.</p>', status_code=404)
-    snapshot = probe_server(alias)
+    snapshot = await run_in_threadpool(probe_server, alias)
     notes = next((item.notes for item in inventory(db) if item.spec.alias == alias), "")
     snapshot.notes = notes
     return templates.TemplateResponse(request, "partials/server_probe.html", {

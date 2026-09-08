@@ -11,13 +11,7 @@
 <div class="alert alert-{{ msg_type }}">{{ msg }}</div>
 {% endif %}
 
-<div class="card">
-  <p class="text-dim section-note">
-    This list is the applications installed on <strong>this</strong> machine.
-    Flatpak/Electron/Steam names can be wrong — edit the process field or add a
-    custom process name. Windows/Android exclusions are out of scope here.
-    Changes apply on the next node activation.
-  </p>
+<div>
   <form method="post" action="/apps" id="app-bypass-form">
     <div class="form-group">
       <label for="app-filter">Filter</label>
@@ -26,29 +20,31 @@
     <p class="text-dim">Selected: <strong id="selected-count">{{ selected_count }}</strong></p>
     <div class="app-grid" id="app-grid">
       {% for app in apps %}
-      <label class="app-tile" data-name="{{ app.name|lower }} {{ app.process_name|lower }}">
-        <input type="checkbox" name="app_ids" value="{{ app.app_id }}"
+      <div class="app-tile" data-name="{{ app.name|lower }} {{ app.process_name|lower }} {{ (app.process_path or '')|lower }}">
+        <input id="select-{{ app.app_id }}" type="checkbox" name="app_ids" value="{{ app.app_id }}"
+               aria-label="Exclude {{ app.name }}"
                {% if app.app_id in selected_ids %}checked{% endif %}>
         <img class="app-icon" src="/apps/icon?app_id={{ app.app_id|urlencode }}" alt="" width="32" height="32">
         <span class="app-meta">
-          <strong>{{ app.name }}</strong>
+          <label for="select-{{ app.app_id }}"><strong>{{ app.name }}</strong></label>
           <input class="app-process" name="process-{{ app.app_id }}"
-                 value="{{ overrides.get(app.app_id, app.process_name) }}"
-                 placeholder="process name" title="Override process_name when Exec is not the real process">
-          {% if app.process_path %}
-          <span class="text-dim app-path">{{ app.process_path }}</span>
+                 value="{{ overrides.get(app.app_id, app.process_path or app.process_name) }}"
+                 aria-label="Process match for {{ app.name }}"
+                 placeholder="Process name or /absolute/path" maxlength="240"
+                 {% if app.app_id in selected_ids %}required{% else %}disabled{% endif %}>
+          {% if not app.process_name and not overrides.get(app.app_id) %}
+          <span class="text-dim app-path">Process match required</span>
           {% endif %}
         </span>
-      </label>
+      </div>
       {% endfor %}
       {% if not apps %}
       <div class="text-dim">No .desktop applications found.</div>
       {% endif %}
     </div>
     <div class="form-group mt-lg">
-      <label>Custom process names</label>
-      <textarea name="custom_processes" rows="4" placeholder="one process name per line">{{ custom_text }}</textarea>
-      <p class="text-dim">Use this when the icon list cannot map Exec to <code>/proc/pid/comm</code>.</p>
+      <label for="custom-processes">Additional process matches</label>
+      <textarea id="custom-processes" name="custom_processes" rows="4" placeholder="Process name or /absolute/path">{{ custom_text }}</textarea>
     </div>
     <button type="submit" class="btn btn-primary">Save bypass list</button>
   </form>
@@ -58,13 +54,31 @@
 (function() {
   var filter = document.getElementById('app-filter');
   var grid = document.getElementById('app-grid');
+  var custom = document.getElementById('custom-processes');
+  var count = document.getElementById('selected-count');
   if (!filter || !grid) return;
   filter.addEventListener('input', function() {
     var q = filter.value.toLowerCase();
     grid.querySelectorAll('.app-tile').forEach(function(tile) {
-      tile.hidden = q && (tile.dataset.name || '').indexOf(q) === -1;
+      var match = tile.querySelector('.app-process').value.toLowerCase();
+      tile.hidden = Boolean(q && (tile.dataset.name + ' ' + match).indexOf(q) === -1);
     });
   });
+  function updateSelection() {
+    var selected = 0;
+    grid.querySelectorAll('.app-tile').forEach(function(tile) {
+      var checked = tile.querySelector('input[type="checkbox"]').checked;
+      var field = tile.querySelector('.app-process');
+      field.disabled = !checked;
+      field.required = checked;
+      if (checked) selected += 1;
+    });
+    var matches = new Set(custom.value.split(/\r?\n/).map(function(line) { return line.trim(); }).filter(Boolean));
+    count.textContent = selected + matches.size;
+  }
+  grid.addEventListener('change', updateSelection);
+  custom.addEventListener('input', updateSelection);
+  updateSelection();
 })();
 </script>
 

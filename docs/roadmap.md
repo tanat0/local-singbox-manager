@@ -9,7 +9,7 @@ features.
 - Local FastAPI web UI for a single Linux host running sing-box.
 - Node parsing for VLESS and Hysteria2/Hy2 URLs.
 - Config generation from stored node data plus DNS and route presets.
-- DNS presets send DoT through the `direct` outbound.
+- DNS presets use the native TLS DNS dialer's direct connection.
 - TUN inbound MTU `1400`.
 - Always-on route guards for generated TUN configs: selected domains are
   blocked and basic RU destinations go direct.
@@ -65,6 +65,11 @@ features.
 
 ## 1.5 Operations Hardening
 
+- Validate DNS stability during an agreed activation window: compare the
+  existing Quad9 and Cloudflare DoT presets while keeping the node, MTU, and
+  bandwidth unchanged. Keep the previous preset available for rollback.
+- After DNS validation, compare Hy2 and TCP VLESS with the same small workload.
+  Check counter deltas and DNS errors before considering server-side tuning.
 - Continue splitting broad tests or service modules only when feature work makes
   the current shape harder to maintain.
 

@@ -67,16 +67,26 @@ DNS presets:
 
 | Preset | Resolver |
 | --- | --- |
-| `quad9_tls` | 9.9.9.9 over DoT, `detour: direct` |
-| `cloudflare_tls` | 1.1.1.1 over DoT, `detour: direct` |
-| `google_tls` | 8.8.8.8 over DoT, `detour: direct` |
+| `quad9_tls` | 9.9.9.9 over DoT |
+| `cloudflare_tls` | 1.1.1.1 over DoT |
+| `google_tls` | 8.8.8.8 over DoT |
 
-DoT is sent out the `direct` outbound so DNS does not depend on the proxy
-tunnel. If a local ISP blocks DoT, switch presets or expect resolve failures
-without the tunnel.
+These presets use the native TLS DNS dialer, which connects directly when
+`detour` is omitted; resolver traffic does not use the selected proxy. Do not
+add `detour: direct`: sing-box 1.13.11 rejects a detour to an empty direct
+outbound at startup, even though `sing-box check` accepts it. See the
+[TLS DNS documentation](https://sing-box.sagernet.org/configuration/dns/server/tls/).
 
-The generated TUN inbound uses MTU `1400` (not 1500) to reduce QUIC/Hysteria2
-fragmentation stalls.
+There is no automatic resolver failover. All three presets use TCP port 853;
+switching providers will not help if that port is blocked. Compare DNS failures
+with a small HTTPS request to a known IP before changing the proxy or bandwidth.
+Change one setting at a time: try another DNS preset, then activate the node or
+profile during a maintenance window. Activation restarts sing-box and interrupts
+the tunnel. If a profile is active, change its DNS preset; it overrides the
+global setting. Restore the previous preset and activate again if it regresses.
+
+The generated TUN inbound uses MTU `1400`. This does not fix DNS failures or
+guarantee a working path MTU for every connection.
 
 Route presets:
 
@@ -103,8 +113,22 @@ before preset-specific rules:
 
 On the managed Linux host only, the Apps page can add `process_name` /
 `process_path` rules to `direct`. Those rules are placed before DNS hijack so
-excluded apps keep their own DNS. They are not copied into generated client
-JSON or `.sbclient` bundles.
+matching sockets bypass both DNS interception and the route guards. They are
+not copied into generated client JSON or `.sbclient` bundles.
+
+The match field stores either an exact process name or an absolute executable
+path. Native executable symlinks are resolved when building the application
+catalog. Scripts, Flatpak, and AppImage launchers need an explicit match for
+the process that opens the connection; a launcher name or package ID is not
+necessarily that process. Helper processes need their own entries. Inspect the
+executable with `readlink /proc/<pid>/exe` when a suggested match does not work.
+An unavailable launcher's saved match remains under Additional process matches.
+
+Process matching needs permission to inspect the connection owner. DNS sent by
+a shared resolver such as systemd-resolved belongs to that resolver, not to the
+original application. Selecting an app therefore does not promise per-app DNS
+isolation. Saving only changes the stored list; activation applies it and
+interrupts the tunnel.
 
 This is local routing policy for the generated TUN config. It is not
 server-side enforcement and it does not affect clients that imported a raw
@@ -122,6 +146,8 @@ diagnostics and re-activate a node after changing the setting.
   SQLite health log.
 - Apps page lists local `.desktop` applications for host TUN process bypass.
 - Servers page probes named SSH aliases without reading remote secrets.
+- SSH probes require an already trusted host key and run in a worker thread.
+  Counters are cumulative since boot; compare snapshots before diagnosing loss.
 - Problem Digest groups recent sing-box DNS and connection errors by target and
   normalized reason. It is a triage view; raw logs remain the source of truth.
 
@@ -131,7 +157,7 @@ Common Problem Digest reasons:
 | --- | --- | --- |
 | `dns response EOF` | The configured DNS upstream closed the exchange before a usable answer arrived. | Check Diagnostics, try another DNS preset, then re-activate the node/profile. |
 | `remote dial timeout` | The selected outbound or remote server could not connect to the target IP/port before timeout. | Check whether the site/app is reachable later, compare another node, and inspect raw logs for the target. |
-| `stream canceled by remote` | The remote side canceled an existing stream. Frequent Hysteria2/QUIC cancels often mean UDP loss, server send-buffer pressure, or a server bandwidth cap. | Check Servers probe UDP errors and Hysteria bandwidth; compare a TCP VLESS node. |
+| `stream canceled by remote` | The remote side canceled a stream; this alone does not identify packet loss, a bandwidth limit, or server overload. | Correlate with failed requests and changes in UDP error counters; compare a TCP VLESS node after checking DNS. |
 
 Health checks:
 

@@ -17,6 +17,7 @@ import secrets
 import time
 from collections import defaultdict
 from typing import Dict, List
+from urllib.parse import urlsplit
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -128,7 +129,7 @@ def is_authenticated(request: Request) -> bool:
 # ── CSRF: Origin / Referer check ──────────────────────────────────────────────
 # Defends against cross-site form submissions. No token management needed.
 # A malicious website cannot spoof the Origin header.
-_ALLOWED_ORIGINS = ("http://127.0.0.1", "http://localhost")
+_ALLOWED_HOSTS = {"127.0.0.1", "localhost"}
 
 
 def check_csrf(request: Request) -> bool:
@@ -141,7 +142,16 @@ def check_csrf(request: Request) -> bool:
     src = origin or referer
     if not src:
         return False  # no origin info → reject
-    return any(src.startswith(o) for o in _ALLOWED_ORIGINS)
+    try:
+        parsed = urlsplit(src)
+        return (
+            parsed.scheme == "http"
+            and parsed.hostname in _ALLOWED_HOSTS
+            and parsed.username is None
+            and parsed.password is None
+        )
+    except ValueError:
+        return False
 
 
 # ── Middleware ────────────────────────────────────────────────────────────────
@@ -151,7 +161,7 @@ _OPEN_PREFIXES = ("/static/", "/login", "/health", "/version")
 # Paths that return JSON 401 (not redirect) when unauthenticated
 _API_PREFIXES = ("/api/",)
 # Paths that skip CSRF (API routes use 401, not CSRF redirect)
-_CSRF_SKIP_PREFIXES = ("/api/", "/login", "/logout", "/static/", "/health", "/version")
+_CSRF_SKIP_PREFIXES = ("/login", "/logout", "/static/", "/health", "/version")
 
 
 class AuthMiddleware(BaseHTTPMiddleware):

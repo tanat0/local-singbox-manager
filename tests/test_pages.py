@@ -116,7 +116,7 @@ def test_servers_notes_and_mocked_probe(client):
     assert b"Notes saved" in response.content
     payload = '{"hostname":"kz","units":["hysteria-server.service"],"listen":["udp *:443"],"journal_err_24h":"1"}'
     with patch("app.services.servers._ssh_python", return_value=CommandResult(True, payload, 0)):
-        probe = client.get("/servers/hykz/probe")
+        probe = client.post("/servers/hykz/probe")
     assert probe.status_code == 200
     assert b"reachable" in probe.content
     assert b"hysteria-server.service" in probe.content

@@ -10,6 +10,7 @@ except ImportError:
 from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.db import get_db
 from app.routes.common import redirect
@@ -34,12 +35,17 @@ _PLACEHOLDER_SVG = (
 
 
 @router.get("/apps", response_class=HTMLResponse)
-async def apps_page(request: Request, db: Session = Depends(get_db)):
+def apps_page(request: Request, db: Session = Depends(get_db)):
     apps = list_desktop_apps()
     entries = load_bypass_entries(db)
+    available_ids = {app.app_id for app in apps}
+    unavailable_matches = [
+        entry.process_path or entry.process_name
+        for entry in entries if not entry.custom and entry.app_id not in available_ids
+    ]
     selected = selected_app_ids(entries)
     overrides = {
-        entry.app_id: entry.process_name
+        entry.app_id: entry.process_path or entry.process_name
         for entry in entries
         if not entry.custom and entry.process_name
     }
@@ -47,7 +53,7 @@ async def apps_page(request: Request, db: Session = Depends(get_db)):
         "apps": apps,
         "selected_ids": selected,
         "overrides": overrides,
-        "custom_text": custom_process_text(entries),
+        "custom_text": "\n".join([custom_process_text(entries), *unavailable_matches]).strip(),
         "selected_count": len(entries),
         "msg": request.query_params.get("msg", ""),
         "msg_type": request.query_params.get("msg_type", "info"),
@@ -66,8 +72,12 @@ async def save_apps(
         app_id: str(form.get(f"process-{app_id}", "") or "")
         for app_id in app_ids
     }
-    entries = build_entries_from_form(app_ids, overrides, custom_processes)
-    save_bypass_entries(db, entries)
+    apps = await run_in_threadpool(list_desktop_apps)
+    try:
+        entries = build_entries_from_form(app_ids, overrides, custom_processes, apps=apps)
+        save_bypass_entries(db, entries)
+    except ValueError as exc:
+        return redirect("/apps", msg=str(exc), msg_type="error")
     return redirect(
         "/apps",
         msg=f"Saved {len(entries)} bypass entries. Re-activate the node to apply.",
@@ -76,14 +86,18 @@ async def save_apps(
 
 
 @router.get("/apps/icon")
-async def app_icon(app_id: Annotated[str, Query()]):
+def app_icon(app_id: Annotated[str, Query()]):
     app = get_desktop_app(app_id)
     if app and app.icon_path and app.icon_path.is_file():
         media_type = mimetypes.guess_type(str(app.icon_path))[0] or "application/octet-stream"
         return FileResponse(
             path=app.icon_path,
             media_type=media_type,
-            headers={"Cache-Control": "private, max-age=86400"},
+            headers={
+                "Cache-Control": "private, max-age=86400",
+                "X-Content-Type-Options": "nosniff",
+                "Content-Security-Policy": "default-src 'none'; sandbox",
+            },
         )
     return Response(
         content=_PLACEHOLDER_SVG,

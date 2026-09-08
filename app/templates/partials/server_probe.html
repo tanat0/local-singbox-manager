@@ -19,7 +19,7 @@
   {% endif %}
   {% if server.nstat %}
   <p class="text-dim">
-    UDP sndbuf err {{ server.nstat.get("UdpSndbufErrors", "—") }},
+    Since boot: UDP sndbuf err {{ server.nstat.get("UdpSndbufErrors", "—") }},
     UDP in err {{ server.nstat.get("UdpInErrors", "—") }},
     TCP retrans {{ server.nstat.get("TcpRetransSegs", "—") }}
   </p>

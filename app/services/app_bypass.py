@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from pathlib import PurePosixPath
 from typing import Any, Optional, Sequence
 
 from sqlalchemy.orm import Session
 
-from app.services.desktop_apps import DesktopApp, is_valid_app_id, list_desktop_apps
+from app.services.desktop_apps import DesktopApp, is_valid_app_id
 from app.services.settings import get_setting, set_setting
 
 APP_BYPASS_SETTING_KEY = "app_bypass_json"
@@ -41,7 +42,8 @@ def load_bypass_entries(db: Session) -> list[BypassEntry]:
 
 
 def save_bypass_entries(db: Session, entries: Sequence[BypassEntry]) -> None:
-    limited = list(entries)[:_MAX_ENTRIES]
+    if len(entries) > _MAX_ENTRIES:
+        raise ValueError(f"At most {_MAX_ENTRIES} bypass entries are allowed.")
     payload = [
         {
             "app_id": entry.app_id,
@@ -50,7 +52,7 @@ def save_bypass_entries(db: Session, entries: Sequence[BypassEntry]) -> None:
             "process_path": entry.process_path,
             "custom": entry.custom,
         }
-        for entry in limited
+        for entry in entries
     ]
     set_setting(db, APP_BYPASS_SETTING_KEY, json.dumps(payload, ensure_ascii=False))
 
@@ -60,7 +62,7 @@ def selected_app_ids(entries: Sequence[BypassEntry]) -> set[str]:
 
 
 def custom_process_text(entries: Sequence[BypassEntry]) -> str:
-    return "\n".join(entry.process_name for entry in entries if entry.custom)
+    return "\n".join(entry.process_path or entry.process_name for entry in entries if entry.custom)
 
 
 def process_bypass_for_config(db: Session) -> dict[str, list[str]]:
@@ -85,24 +87,19 @@ def build_entries_from_form(
     process_overrides: dict[str, str],
     custom_text: str,
     *,
-    apps: Optional[Sequence[DesktopApp]] = None,
+    apps: Sequence[DesktopApp],
 ) -> list[BypassEntry]:
-    catalog = {app.app_id: app for app in (apps if apps is not None else list_desktop_apps())}
+    catalog = {app.app_id: app for app in apps}
     entries: list[BypassEntry] = []
     seen: set[str] = set()
     for app_id in selected_ids:
-        if app_id in seen or not is_valid_app_id(app_id):
+        if app_id in seen:
             continue
         app = catalog.get(app_id)
-        if app is None:
-            continue
-        override = _clean_process(process_overrides.get(app_id, ""))
-        if override and override != app.process_name:
-            process_name = override
-            process_path = None
-        else:
-            process_name = app.process_name
-            process_path = app.process_path
+        if not is_valid_app_id(app_id) or app is None:
+            raise ValueError("An application is no longer available. Reload the page before saving.")
+        match = process_overrides.get(app_id, app.process_path or app.process_name)
+        process_name, process_path = _parse_process_match(match)
         entries.append(
             BypassEntry(
                 app_id=app.app_id,
@@ -113,43 +110,63 @@ def build_entries_from_form(
         )
         seen.add(app_id)
 
+    custom_count = 0
     for line in custom_text.splitlines():
-        process_name = _clean_process(line)
-        if not process_name:
+        if not line.strip():
             continue
-        custom_id = f"custom:{process_name}"
+        process_name, process_path = _parse_process_match(line)
+        custom_id = f"custom:{process_path or process_name}"
         if custom_id in seen:
             continue
-        if len([entry for entry in entries if entry.custom]) >= _MAX_CUSTOM_LINES:
-            break
+        custom_count += 1
+        if custom_count > _MAX_CUSTOM_LINES:
+            raise ValueError(f"At most {_MAX_CUSTOM_LINES} custom matches are allowed.")
         entries.append(
             BypassEntry(
                 app_id=custom_id,
                 name=process_name,
                 process_name=process_name,
-                process_path=None,
+                process_path=process_path,
                 custom=True,
             )
         )
         seen.add(custom_id)
+    if len(entries) > _MAX_ENTRIES:
+        raise ValueError(f"At most {_MAX_ENTRIES} bypass entries are allowed.")
     return entries
+
+
+def _parse_process_match(value: str) -> tuple[str, Optional[str]]:
+    match = value.strip()
+    if not match or any(ord(ch) < 32 or ord(ch) == 127 for ch in match):
+        raise ValueError("Selected applications need an exact process name or absolute executable path.")
+    if match.startswith("/"):
+        path = PurePosixPath(match)
+        if len(match) > 240 or ".." in path.parts or not path.name or match.endswith("/"):
+            raise ValueError("Invalid executable path.")
+        return path.name, str(path)
+    name = _clean_process(match)
+    if not name:
+        raise ValueError("Use an exact process name or an absolute executable path, without arguments.")
+    return name, None
 
 
 def _entry_from_json(item: Any) -> Optional[BypassEntry]:
     if not isinstance(item, dict):
         return None
     app_id = str(item.get("app_id") or "")
-    process_name = _clean_process(str(item.get("process_name") or ""))
-    if not process_name:
+    raw_path = str(item.get("process_path") or "").strip()
+    if raw_path and not raw_path.startswith("/"):
+        return None
+    try:
+        process_name, process_path = _parse_process_match(raw_path or str(item.get("process_name") or ""))
+    except ValueError:
         return None
     custom = bool(item.get("custom"))
     if custom:
-        app_id = f"custom:{process_name}"
+        app_id = f"custom:{process_path or process_name}"
     elif not is_valid_app_id(app_id):
         return None
-    process_path = str(item.get("process_path") or "").strip() or None
-    if process_path and (not process_path.startswith("/") or len(process_path) > 240):
-        process_path = None
     name = str(item.get("name") or process_name).strip()[:80]
     return BypassEntry(
         app_id=app_id,
@@ -162,7 +179,7 @@ def _entry_from_json(item: Any) -> Optional[BypassEntry]:
 
 def _clean_process(value: str) -> str:
     cleaned = value.strip()
-    if not cleaned or "/" in cleaned or "\x00" in cleaned:
+    if not cleaned or "/" in cleaned or any(ord(ch) < 32 or ord(ch) == 127 for ch in cleaned):
         return ""
     if len(cleaned) > _MAX_PROCESS_LEN:
         return ""

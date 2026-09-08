@@ -5,6 +5,7 @@ from typing import Any
 DEFAULT_DNS_PRESET = "quad9_tls"
 
 # Uses sing-box 1.13+ DNS server format — NOT the deprecated "address": "tls://..." form.
+# Native TLS DNS dials directly by default; detouring to an empty direct outbound fails at startup.
 DNS_PRESETS: dict[str, dict[str, Any]] = {
     "quad9_tls": {
         "label": "Quad9 (DoT)",
@@ -15,7 +16,6 @@ DNS_PRESETS: dict[str, dict[str, Any]] = {
                 "tag": "quad9",
                 "server": "9.9.9.9",
                 "server_port": 853,
-                "detour": "direct",
             }],
             "final": "quad9",
         },
@@ -29,7 +29,6 @@ DNS_PRESETS: dict[str, dict[str, Any]] = {
                 "tag": "cf",
                 "server": "1.1.1.1",
                 "server_port": 853,
-                "detour": "direct",
             }],
             "final": "cf",
         },
@@ -43,7 +42,6 @@ DNS_PRESETS: dict[str, dict[str, Any]] = {
                 "tag": "google",
                 "server": "8.8.8.8",
                 "server_port": 853,
-                "detour": "direct",
             }],
             "final": "google",
         },

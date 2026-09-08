@@ -55,8 +55,8 @@ def hysteria():
     m = re.search(r"^listen:\s*(\S+)", raw, re.M)
     if m:
         info["listen"] = m.group(1)
-    up = re.search(r"^\s*up:\s*(.+)$", raw, re.M)
-    down = re.search(r"^\s*down:\s*(.+)$", raw, re.M)
+    up = re.search(r"^\s+up:[ \t]*([0-9.]+[ \t]*[kKmMgGtT]?[bB](?:ps)?)[ \t]*(?:#.*)?$", raw, re.M)
+    down = re.search(r"^\s+down:[ \t]*([0-9.]+[ \t]*[kKmMgGtT]?[bB](?:ps)?)[ \t]*(?:#.*)?$", raw, re.M)
     if up and down:
         info["bandwidth_up"] = up.group(1).strip()
         info["bandwidth_down"] = down.group(1).strip()
@@ -66,12 +66,16 @@ def hysteria():
     return info
 
 def nstat():
-    text = run(["nstat", "-az"])
+    text = run(["cat", "/proc/net/snmp"])
     out = {}
-    for key in ("UdpInErrors", "UdpRcvbufErrors", "UdpSndbufErrors", "TcpRetransSegs"):
-        m = re.search(rf"^{key}\s+(\d+)", text, re.M)
-        if m:
-            out[key] = int(m.group(1))
+    lines = text.splitlines()
+    for header, values in zip(lines[::2], lines[1::2]):
+        names = header.split()
+        numbers = values.split()
+        for name, value in zip(names[1:], numbers[1:]):
+            key = names[0].rstrip(":") + name
+            if key in ("UdpInErrors", "UdpRcvbufErrors", "UdpSndbufErrors", "TcpRetransSegs"):
+                out[key] = int(value)
     return out
 
 mem_avail = ""
@@ -191,7 +195,7 @@ def probe_server(alias: str) -> ServerSnapshot:
     hysteria = payload.get("hysteria")
     snapshot.hysteria = _safe_hysteria(hysteria) if isinstance(hysteria, dict) else None
     try:
-        snapshot.journal_err_24h = int(str(payload.get("journal_err_24h") or "0").strip() or 0)
+        snapshot.journal_err_24h = int(str(payload.get("journal_err_24h", "")).strip())
     except (TypeError, ValueError):
         snapshot.journal_err_24h = None
     return snapshot
@@ -206,6 +210,8 @@ def _ssh_python(alias: str, script: str, timeout: int) -> CommandResult:
                 "ssh",
                 "-o", "BatchMode=yes",
                 "-o", "ConnectTimeout=8",
+                "-o", "StrictHostKeyChecking=yes",
+                "-o", "UpdateHostKeys=no",
                 alias,
                 "python3",
                 "-u",
@@ -269,9 +275,13 @@ def _safe_nstat(value: object) -> dict:
 
 def _safe_hysteria(value: dict) -> dict:
     out = {}
-    for key in ("listen", "bandwidth_up", "bandwidth_down"):
-        if key in value:
-            out[key] = str(value[key])[:40]
+    listen = str(value.get("listen", ""))
+    if re.fullmatch(r"[0-9a-fA-F.:\[\]]{1,80}", listen):
+        out["listen"] = listen
+    for key in ("bandwidth_up", "bandwidth_down"):
+        bandwidth = str(value.get(key, ""))
+        if re.fullmatch(r"[0-9.]+\s*[kmgt]?b(?:ps)?", bandwidth, re.I):
+            out[key] = bandwidth
     out["ignore_client_bandwidth"] = bool(value.get("ignore_client_bandwidth"))
     out["has_obfs"] = bool(value.get("has_obfs"))
     out["has_auth"] = bool(value.get("has_auth"))
@@ -279,7 +289,15 @@ def _safe_hysteria(value: dict) -> dict:
 
 
 def _safe_error(text: str) -> str:
-    cleaned = re.sub(r"\b([0-9]{1,3}\.){3}[0-9]{1,3}\b", "<ip>", text)
-    cleaned = re.sub(r"[A-Za-z0-9+/=_-]{32,}", "<redacted>", cleaned)
-    return cleaned.strip()[:240]
-
+    message = text.lower()
+    if "host key verification failed" in message or "host identification has changed" in message:
+        return "SSH host key verification failed. Check the alias in a terminal."
+    if "permission denied" in message:
+        return "SSH authentication failed. Check the key and remote user."
+    if "timed out" in message:
+        return "SSH connection or probe timed out."
+    if "could not resolve hostname" in message:
+        return "SSH hostname could not be resolved."
+    if "connection refused" in message or "connection closed" in message:
+        return "SSH connection refused or closed."
+    return "SSH probe failed. Check the alias and access in a terminal."

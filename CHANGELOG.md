@@ -29,8 +29,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and `make doctor`.
 
 ### Changed
-- DNS presets send DoT through the `direct` outbound so resolver traffic does
-  not depend on the proxy tunnel.
+- DNS presets use the native TLS DNS dialer's direct connection, independently
+  of the selected proxy tunnel.
 - Generated TUN inbound MTU is `1400` instead of `1500`.
 - Background health and Telegram polling can be disabled for tests with
   `BACKGROUND_TASKS_ENABLED=0`.
@@ -46,6 +46,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   sing-box configs instead of being copied into outbound `network`.
 
 ### Fixed
+- App bypass now preserves explicit executable paths and resolves native
+  symlinks; ambiguous launchers require an explicit process match.
+- Invalid bypass input is rejected without replacing the saved list. The app
+  filter, selection counter, and matches for missing launchers stay consistent.
+- Icon responses reject path traversal, escaped symlinks, and non-image files.
+- SSH probes no longer block the web event loop, require trusted host keys,
+  and use POST with CSRF protection. Remote error text is not echoed to the UI.
+- CSRF checks reject lookalike localhost domains and cover mutating API routes.
+- Removed `detour: direct` from DNS presets: sing-box 1.13.11 rejects a detour
+  to an empty direct outbound at startup, including in generated client JSON.
 - Generated VLESS configs no longer pin `network=tcp` by default, avoiding
   TUN UDP rejection by TCP-only outbounds.
 - Unsupported VLESS transports such as XHTTP/SplitHTTP now fail with a clear

@@ -3,7 +3,7 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from app.db import SessionLocal
-from app.services.servers import inventory, probe_server, save_notes
+from app.services.servers import _safe_error, _ssh_python, inventory, probe_server, save_notes
 from app.system_clients import CommandResult
 
 
@@ -57,5 +57,28 @@ def test_probe_timeout_is_safe():
     ):
         snapshot = probe_server("swvps")
     assert snapshot.reachable is False
-    assert "<ip>" in snapshot.error
+    assert "timed out" in snapshot.error
     assert "1.2.3.4" not in snapshot.error
+
+
+def test_ssh_requires_known_host_and_does_not_update_keys():
+    with patch("app.services.servers.subprocess.run") as run:
+        run.return_value.returncode = 0
+        run.return_value.stdout = "{}"
+        assert _ssh_python("hykz", "print('{}')", 12).ok
+    args = run.call_args.args[0]
+    assert "StrictHostKeyChecking=yes" in args
+    assert "UpdateHostKeys=no" in args
+    assert "BatchMode=yes" in args
+    assert "shell" not in run.call_args.kwargs
+
+
+def test_unknown_ssh_error_does_not_echo_remote_output():
+    assert _safe_error("banner token=abc vless://user:pass@example.com") == (
+        "SSH probe failed. Check the alias and access in a terminal."
+    )
+
+
+def test_missing_journal_count_is_not_reported_as_zero():
+    with patch("app.services.servers._ssh_python", return_value=CommandResult(True, "{}", 0)):
+        assert probe_server("hykz").journal_err_24h is None

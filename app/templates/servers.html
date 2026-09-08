@@ -35,7 +35,8 @@
         <textarea name="notes_{{ server.spec.alias }}" rows="2">{{ server.notes }}</textarea>
       </div>
       <button type="button" class="btn btn-outline btn-sm"
-              hx-get="/servers/{{ server.spec.alias }}/probe"
+              hx-post="/servers/{{ server.spec.alias }}/probe"
+              hx-disabled-elt="this"
               hx-target="#probe-{{ server.spec.alias }}"
               hx-swap="innerHTML">
         Probe over SSH

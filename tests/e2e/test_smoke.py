@@ -79,6 +79,19 @@ def test_apps_page_loads(page: Page, base_url: str):
     expect(page.locator("#app-grid")).to_be_visible()
 
 
+def test_app_bypass_filter_counter_and_custom_path(page: Page, base_url: str):
+    page.goto(base_url + "/apps")
+    page.locator("#app-filter").fill("no-such-app-9f3a")
+    expect(page.locator(".app-tile:visible")).to_have_count(0)
+    page.locator("#app-filter").fill("")
+    page.locator("input[name='app_ids']:checked").evaluate_all("items => items.forEach(i => i.click())")
+    page.locator("#custom-processes").fill("/opt/test-browser\nhelper-process")
+    expect(page.locator("#selected-count")).to_have_text("2")
+    page.get_by_role("button", name="Save bypass list").click()
+    expect(page.locator("#custom-processes")).to_have_value("/opt/test-browser\nhelper-process")
+    expect(page.locator(".alert-success")).to_contain_text("Saved 2 bypass entries")
+
+
 def test_servers_page_loads(page: Page, base_url: str):
     page.goto(base_url + "/servers")
     expect(page).to_have_title("Servers — Sing-Box Manager")

@@ -121,7 +121,7 @@ def build_route_config(
 
     route = copy.deepcopy(ROUTE_PRESETS[route_preset]["route"])
     preset_rules = route.get("rules", [])
-    # Process bypass must precede DNS hijack so excluded apps keep their own DNS.
+    # Match the socket owner before DNS interception and the shared route guards.
     route["rules"] = [
         *build_process_bypass_rules(process_bypass),
         copy.deepcopy(_DNS_HIJACK_RULE),

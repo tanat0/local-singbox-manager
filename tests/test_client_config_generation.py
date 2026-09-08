@@ -3,6 +3,7 @@ import pytest
 from app.parsers.hysteria2 import parse_hysteria2
 from app.parsers.vless import parse_vless
 from app.singbox.client_generator import generate_client_config
+from app.singbox.dns import DNS_PRESETS
 
 VLESS_A = (
     "vless://12345678-abcd-0000-0000-000000000001@1.2.3.4:443"
@@ -25,15 +26,20 @@ def test_client_config_single_node_uses_node_as_final_outbound():
     assert {outbound["tag"] for outbound in cfg["outbounds"]} == {"node-a", "direct", "block"}
 
 
-def test_client_config_includes_route_guards():
-    cfg = generate_client_config([parse_vless(VLESS_A)])
+@pytest.mark.parametrize("dns_preset", DNS_PRESETS)
+def test_client_config_dns_and_route_guards(dns_preset):
+    cfg = generate_client_config([parse_vless(VLESS_A)], dns_preset=dns_preset)
     rules = cfg["route"]["rules"]
 
     assert rules[0] == {"port": 53, "action": "hijack-dns"}
     assert any("api.ipify.org" in rule.get("domain", []) and rule["outbound"] == "block" for rule in rules)
     assert any("gosuslugi.ru" in rule.get("domain", []) and rule["outbound"] == "direct" for rule in rules)
     assert all("process_name" not in rule and "process_path" not in rule for rule in rules)
-    assert cfg["dns"]["servers"][0]["detour"] == "direct"
+    server = cfg["dns"]["servers"][0]
+    assert "detour" not in server
+    assert server["type"] == "tls"
+    assert server["server_port"] == 853
+    assert cfg["dns"]["final"] == server["tag"]
     assert cfg["inbounds"][0]["mtu"] == 1400
 
 
