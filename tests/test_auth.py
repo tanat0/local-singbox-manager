@@ -195,6 +195,14 @@ def test_csrf_blocks_wrong_origin():
     assert not check_csrf(_fake_request(origin="http://evil.com"))
 
 
+@pytest.mark.parametrize("origin", [
+    "http://localhost.evil.example", "http://127.0.0.1.evil.example",
+    "http://localhost@evil.example", "http://evil@localhost", "http://[broken",
+])
+def test_csrf_rejects_localhost_lookalikes(origin):
+    assert not check_csrf(_fake_request(origin=origin))
+
+
 def test_csrf_blocks_missing_origin_and_referer():
     assert not check_csrf(_fake_request())  # no origin, no referer
 
@@ -331,6 +339,16 @@ def test_csrf_allows_post_from_localhost(auth_client):
     )
     auth_client.cookies.clear()
     assert r.status_code in (200, 303)
+
+
+@pytest.mark.parametrize("path", ["/apps", "/servers/hykz/probe", "/api/nodes/import"])
+def test_host_actions_require_csrf_with_authenticated_session(auth_client, path):
+    auth_client.cookies.set(SESSION_COOKIE, create_session_token())
+    try:
+        response = auth_client.post(path, headers={"origin": "http://localhost.evil.example"})
+        assert response.status_code == 403
+    finally:
+        auth_client.cookies.clear()
 
 
 def test_logout_clears_session_cookie(auth_client):

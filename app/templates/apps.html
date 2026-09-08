@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Apps — Sing-Box Manager{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>App Bypass</h1>
+  <span class="text-dim">Linux host TUN only. Selected apps go <code>direct</code>.</span>
+</div>
+
+{% if msg %}
+<div class="alert alert-{{ msg_type }}">{{ msg }}</div>
+{% endif %}
+
+<div>
+  <form method="post" action="/apps" id="app-bypass-form">
+    <div class="form-group">
+      <label for="app-filter">Filter</label>
+      <input id="app-filter" type="search" placeholder="Name or process…" autocomplete="off">
+    </div>
+    <p class="text-dim">Selected: <strong id="selected-count">{{ selected_count }}</strong></p>
+    <div class="app-grid" id="app-grid">
+      {% for app in apps %}
+      <div class="app-tile" data-name="{{ app.name|lower }} {{ app.process_name|lower }} {{ (app.process_path or '')|lower }}">
+        <input id="select-{{ app.app_id }}" type="checkbox" name="app_ids" value="{{ app.app_id }}"
+               aria-label="Exclude {{ app.name }}"
+               {% if app.app_id in selected_ids %}checked{% endif %}>
+        <img class="app-icon" src="/apps/icon?app_id={{ app.app_id|urlencode }}" alt="" width="32" height="32">
+        <span class="app-meta">
+          <label for="select-{{ app.app_id }}"><strong>{{ app.name }}</strong></label>
+          <input class="app-process" name="process-{{ app.app_id }}"
+                 value="{{ overrides.get(app.app_id, app.process_path or app.process_name) }}"
+                 aria-label="Process match for {{ app.name }}"
+                 placeholder="Process name or /absolute/path" maxlength="240"
+                 {% if app.app_id in selected_ids %}required{% else %}disabled{% endif %}>
+          {% if not app.process_name and not overrides.get(app.app_id) %}
+          <span class="text-dim app-path">Process match required</span>
+          {% endif %}
+        </span>
+      </div>
+      {% endfor %}
+      {% if not apps %}
+      <div class="text-dim">No .desktop applications found.</div>
+      {% endif %}
+    </div>
+    <div class="form-group mt-lg">
+      <label for="custom-processes">Additional process matches</label>
+      <textarea id="custom-processes" name="custom_processes" rows="4" placeholder="Process name or /absolute/path">{{ custom_text }}</textarea>
+    </div>
+    <button type="submit" class="btn btn-primary">Save bypass list</button>
+  </form>
+</div>
+
+<script>
+(function() {
+  var filter = document.getElementById('app-filter');
+  var grid = document.getElementById('app-grid');
+  var custom = document.getElementById('custom-processes');
+  var count = document.getElementById('selected-count');
+  if (!filter || !grid) return;
+  filter.addEventListener('input', function() {
+    var q = filter.value.toLowerCase();
+    grid.querySelectorAll('.app-tile').forEach(function(tile) {
+      var match = tile.querySelector('.app-process').value.toLowerCase();
+      tile.hidden = Boolean(q && (tile.dataset.name + ' ' + match).indexOf(q) === -1);
+    });
+  });
+  function updateSelection() {
+    var selected = 0;
+    grid.querySelectorAll('.app-tile').forEach(function(tile) {
+      var checked = tile.querySelector('input[type="checkbox"]').checked;
+      var field = tile.querySelector('.app-process');
+      field.disabled = !checked;
+      field.required = checked;
+      if (checked) selected += 1;
+    });
+    var matches = new Set(custom.value.split(/\r?\n/).map(function(line) { return line.trim(); }).filter(Boolean));
+    count.textContent = selected + matches.size;
+  }
+  grid.addEventListener('change', updateSelection);
+  custom.addEventListener('input', updateSelection);
+  updateSelection();
+})();
+</script>
+
+{% endblock %}

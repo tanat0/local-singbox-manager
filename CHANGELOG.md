@@ -8,6 +8,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Linux App Bypass page: installed `.desktop` apps with icons, checkboxes, and
+  host-only `process_name` / `process_path` → `direct` rules.
+- Servers page: SSH inventory for `hykz`, `aeza`, `swvps`, and `ge_vps` with
+  non-secret probes. No 3x-ui API and no remote credential display.
 - User distribution hardening: selectable node assignments, config versions,
   deterministic fingerprints, refresh limits, delivery log visibility, and
   best-effort Telegram notifications when assigned configs change.
@@ -16,10 +20,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Managed-user delivery can now attach `.sbclient` bundles for the local
   `singbox-client` app through a separate `/sbclient` Telegram command, without
   adding a client sync API.
+- Operator web download of generated sing-box JSON and `.sbclient` bundles from
+  the Users page, using the same assignment and document builders as Telegram
+  delivery.
+- Optional node `topology_role` labels (`entry_relay`, `upstream_exit`) for
+  manual 3x-ui relay inventory, without panel credentials or API calls.
 - Local quality gates: check-only git hooks, `make check-fast`, `make check`,
   and `make doctor`.
 
 ### Changed
+- DNS presets use the native TLS DNS dialer's direct connection, independently
+  of the selected proxy tunnel.
+- Generated TUN inbound MTU is `1400` instead of `1500`.
 - Background health and Telegram polling can be disabled for tests with
   `BACKGROUND_TASKS_ENABLED=0`.
 - Unit tests now use an isolated temp database by default instead of the local
@@ -34,6 +46,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   sing-box configs instead of being copied into outbound `network`.
 
 ### Fixed
+- App bypass now preserves explicit executable paths and resolves native
+  symlinks; ambiguous launchers require an explicit process match.
+- Invalid bypass input is rejected without replacing the saved list. The app
+  filter, selection counter, and matches for missing launchers stay consistent.
+- Icon responses reject path traversal, escaped symlinks, and non-image files.
+- SSH probes no longer block the web event loop, require trusted host keys,
+  and use POST with CSRF protection. Remote error text is not echoed to the UI.
+- CSRF checks reject lookalike localhost domains and cover mutating API routes.
+- Removed `detour: direct` from DNS presets: sing-box 1.13.11 rejects a detour
+  to an empty direct outbound at startup, including in generated client JSON.
 - Generated VLESS configs no longer pin `network=tcp` by default, avoiding
   TUN UDP rejection by TCP-only outbounds.
 - Unsupported VLESS transports such as XHTTP/SplitHTTP now fail with a clear

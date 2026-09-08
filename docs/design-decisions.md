@@ -94,6 +94,10 @@ bundle. That bundle is delivered through a separate `/sbclient` command instead
 of replacing `/config`, because generic sing-box JSON and `.sbclient` serve
 different clients.
 
+The Users page can download the same generated JSON and `.sbclient` files for
+operator testing. This is a local authenticated export, not a client sync
+endpoint.
+
 Reason:
 
 - raw URLs are the format already stored by the app
@@ -148,6 +152,19 @@ Reason:
 This can break applications that rely on the blocked IP-checker endpoints. It
 is not server-side enforcement and it is not a guarantee that other software
 cannot infer routing state by other means.
+
+## Topology Role Labels
+
+Nodes may store `topology_role` as `entry_relay`, `upstream_exit`, or unset.
+
+Reason:
+
+- the first 3x-ui pass is manual inventory, not panel automation
+- a small explicit label is easier to scan than notes-only
+- generation and user delivery should not silently depend on that label
+
+The field does not contact 3x-ui, store panel credentials, or change group
+assignment.
 
 ## Current Trust Boundaries
 

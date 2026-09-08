@@ -22,12 +22,21 @@ class NodeMutationResult:
     message: str
 
 
+TOPOLOGY_ROLES = ("entry_relay", "upstream_exit")
+TOPOLOGY_ROLE_CHOICES = (
+    ("", "Unset"),
+    ("entry_relay", "Entry relay"),
+    ("upstream_exit", "Upstream exit"),
+)
+
+
 @dataclass(frozen=True)
 class NodeMetadataInput:
     country_code: str = ""
     country_name: str = ""
     provider_name: str = ""
     notes: str = ""
+    topology_role: str = ""
 
 
 def deserialize_node(node: Node) -> ParsedNode:
@@ -155,11 +164,16 @@ def update_node_metadata(db: Session, node_id: int, data: NodeMetadataInput) -> 
     node = NodeRepository(db).get_by_id(node_id)
     if not node:
         return NodeMutationResult(False, "Node not found")
+    try:
+        topology_role = normalize_topology_role(data.topology_role)
+    except ValueError:
+        return NodeMutationResult(False, "Invalid topology role")
 
     node.country_code = data.country_code.strip().upper()[:8] or None
     node.country_name = data.country_name.strip() or None
     node.provider_name = data.provider_name.strip() or None
     node.notes = data.notes.strip() or None
+    node.topology_role = topology_role
     db.commit()
     return NodeMutationResult(True, f"Updated metadata for '{node.tag}'")
 
@@ -230,6 +244,7 @@ def _serialize_node(node: Node) -> Dict[str, object]:
         "provider_name": node.provider_name,
         "provider_suggestion": node.provider_suggestion,
         "notes": node.notes,
+        "topology_role": node.topology_role,
     }
 
 
@@ -243,6 +258,8 @@ def _apply_import_update(node: Node, parsed: ParsedNode, item: Dict[str, object]
     node.provider_name = _str_or_existing(item.get("provider_name"), node.provider_name)
     node.provider_suggestion = _str_or_existing(item.get("provider_suggestion"), node.provider_suggestion)
     node.notes = _str_or_existing(item.get("notes"), node.notes)
+    if "topology_role" in item:
+        node.topology_role = normalize_topology_role(item.get("topology_role"))
 
 
 def _node_from_import(parsed: ParsedNode, item: Dict[str, object]) -> Node:
@@ -258,6 +275,7 @@ def _node_from_import(parsed: ParsedNode, item: Dict[str, object]) -> Node:
         provider_name=_str_or_none(item.get("provider_name")),
         provider_suggestion=_str_or_none(item.get("provider_suggestion")),
         notes=_str_or_none(item.get("notes")),
+        topology_role=normalize_topology_role(item.get("topology_role")),
     )
 
 
@@ -271,3 +289,12 @@ def _str_or_none(value: object) -> Optional[str]:
         return None
     parsed = str(value).strip()
     return parsed or None
+
+
+def normalize_topology_role(value: object) -> Optional[str]:
+    parsed = _str_or_none(value)
+    if parsed is None:
+        return None
+    if parsed not in TOPOLOGY_ROLES:
+        raise ValueError("Invalid topology role")
+    return parsed

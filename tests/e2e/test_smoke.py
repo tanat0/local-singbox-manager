@@ -46,7 +46,7 @@ def test_dashboard_title(page: Page, base_url: str):
 def test_dashboard_has_nav(page: Page, base_url: str):
     page.goto(base_url + "/")
     nav = page.locator("nav")
-    for label in ("Dashboard", "Nodes", "Logs", "Backups", "Settings"):
+    for label in ("Dashboard", "Nodes", "Apps", "Servers", "Logs", "Backups", "Settings"):
         expect(nav.get_by_role("link", name=label, exact=True)).to_be_visible()
 
 
@@ -71,6 +71,31 @@ def test_settings_page_loads(page: Page, base_url: str):
     expect(page).to_have_title("Settings — Sing-Box Manager")
     expect(page.locator("select[name='dns_preset']")).to_be_visible()
     expect(page.locator("select[name='route_preset']")).to_be_visible()
+
+
+def test_apps_page_loads(page: Page, base_url: str):
+    page.goto(base_url + "/apps")
+    expect(page).to_have_title("Apps — Sing-Box Manager")
+    expect(page.locator("#app-grid")).to_be_visible()
+
+
+def test_app_bypass_filter_counter_and_custom_path(page: Page, base_url: str):
+    page.goto(base_url + "/apps")
+    page.locator("#app-filter").fill("no-such-app-9f3a")
+    expect(page.locator(".app-tile:visible")).to_have_count(0)
+    page.locator("#app-filter").fill("")
+    page.locator("input[name='app_ids']:checked").evaluate_all("items => items.forEach(i => i.click())")
+    page.locator("#custom-processes").fill("/opt/test-browser\nhelper-process")
+    expect(page.locator("#selected-count")).to_have_text("2")
+    page.get_by_role("button", name="Save bypass list").click()
+    expect(page.locator("#custom-processes")).to_have_value("/opt/test-browser\nhelper-process")
+    expect(page.locator(".alert-success")).to_contain_text("Saved 2 bypass entries")
+
+
+def test_servers_page_loads(page: Page, base_url: str):
+    page.goto(base_url + "/servers")
+    expect(page).to_have_title("Servers — Sing-Box Manager")
+    expect(page.get_by_text("hykz", exact=True)).to_be_visible()
 
 
 def test_diagnostics_page_loads(page: Page, base_url: str):
@@ -233,6 +258,8 @@ def test_api_logs_line_clamp(page: Page, base_url: str):
     ("/",            "Dashboard"),
     ("/nodes",       "Nodes"),
     ("/profiles",    "Profiles"),
+    ("/apps",        "Apps"),
+    ("/servers",     "Servers"),
     ("/diagnostics", "Diagnostics"),
     ("/logs",        "Logs"),
     ("/backups",     "Backups"),

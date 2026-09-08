@@ -6,6 +6,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.models import DeployLog, Node, Profile
+from app.services.app_bypass import process_bypass_for_config
 from app.services.nodes import deserialize_node
 from app.services.settings import presets, singbox_log_level
 from app.singbox.deployer import DeployResult, deploy_with_rollback
@@ -32,6 +33,7 @@ async def activate_node(db: Session, node: Node, profile: Optional[Profile] = No
                 dns_preset=profile.dns_preset,
                 route_preset=profile.route_preset,
                 log_level=singbox_log_level(db),
+                process_bypass=process_bypass_for_config(db),
             )
         else:
             dns_p, route_p = presets(db)
@@ -40,6 +42,7 @@ async def activate_node(db: Session, node: Node, profile: Optional[Profile] = No
                 dns_preset=dns_p,
                 route_preset=route_p,
                 log_level=singbox_log_level(db),
+                process_bypass=process_bypass_for_config(db),
             )
     except Exception as e:
         return ActivationResult(False, f"Config generation failed: {e}")

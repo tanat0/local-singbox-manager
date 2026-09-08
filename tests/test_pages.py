@@ -49,8 +49,9 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from app.db import SessionLocal  # noqa: E402
 from app.main import app  # noqa: E402
-from app.models import Node  # noqa: E402
+from app.models import ConfigGroup, Node  # noqa: E402
 from app.parsers import parse_url  # noqa: E402
+from app.system_clients import CommandResult  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -90,12 +91,35 @@ def _ensure_node(raw_url: str) -> str:
         ("/users", b"Users"),
         ("/diagnostics", b"Diagnostics"),
         ("/backups", b"Backups"),
+        ("/apps", b"App Bypass"),
+        ("/servers", b"Servers"),
     ],
 )
 def test_page_renders(client, path, needle):
     response = client.get(path)
     assert response.status_code == 200
     assert needle in response.content
+
+
+def test_apps_save_custom_process_and_icon_placeholder(client):
+    response = client.post("/apps", data={"custom_processes": "telegram-desktop"}, follow_redirects=True)
+    assert response.status_code == 200
+    assert b"Saved 1 bypass entries" in response.content
+    icon = client.get("/apps/icon", params={"app_id": "not-valid"})
+    assert icon.status_code == 200
+    assert icon.headers["content-type"].startswith("image/svg+xml")
+
+
+def test_servers_notes_and_mocked_probe(client):
+    response = client.post("/servers/notes", data={"notes_hykz": "kz exit"}, follow_redirects=True)
+    assert response.status_code == 200
+    assert b"Notes saved" in response.content
+    payload = '{"hostname":"kz","units":["hysteria-server.service"],"listen":["udp *:443"],"journal_err_24h":"1"}'
+    with patch("app.services.servers._ssh_python", return_value=CommandResult(True, payload, 0)):
+        probe = client.post("/servers/hykz/probe")
+    assert probe.status_code == 200
+    assert b"reachable" in probe.content
+    assert b"hysteria-server.service" in probe.content
 
 
 def test_health_and_version_probes(client):
@@ -143,6 +167,8 @@ def test_users_create_group_and_user(client):
     assert group_name.encode() in group_resp.content
     assert node_tag.encode() in group_resp.content
     assert b"Bypass LAN" in group_resp.content
+    assert b"Download config.json" in group_resp.content
+    assert b"Download .sbclient" in group_resp.content
 
     user_resp = client.post("/users", data={
         "telegram_id": telegram_id,
@@ -201,3 +227,185 @@ def test_users_page_shows_delivery_log(client):
     assert b"Delivery Log" in response.content
     assert b"/refresh" in response.content
     assert b"aaaaaaaaaaaa" in response.content
+
+
+def _create_group(client, *, name: str, node_tags=None, route_preset: str = "bypass_lan") -> int:
+    data = {
+        "name": name,
+        "description": "Download test",
+        "route_preset": route_preset,
+        "refresh_limit_per_hour": "3",
+        "notes": "",
+        "enabled": "on",
+    }
+    if node_tags:
+        data["node_tags"] = node_tags
+    response = client.post("/users/groups", data=data, follow_redirects=True)
+    assert response.status_code == 200
+    assert b"Created group" in response.content
+    db = SessionLocal()
+    try:
+        group = db.query(ConfigGroup).filter(ConfigGroup.name == name).one()
+        return group.id
+    finally:
+        db.close()
+
+
+def test_users_download_config_json(client):
+    suffix = uuid.uuid4().hex[:8]
+    node_tag = _ensure_node(
+        "vless://12345678-abcd-0000-0000-000000000002@1.2.3.4:443"
+        "?security=reality&sni=example.com&pbk=fakepubkey&sid=aabbcc&fp=chrome&type=tcp"
+        f"#page-dl-config-{suffix}"
+    )
+    group_id = _create_group(client, name=f"dl-config-{suffix}", node_tags=[node_tag])
+
+    response = client.get(f"/users/groups/{group_id}/download/config")
+
+    assert response.status_code == 200
+    assert response.headers.get("cache-control") == "no-store"
+    assert "attachment" in response.headers.get("content-disposition", "")
+    assert response.headers["content-disposition"].endswith(".json\"")
+    payload = json.loads(response.content)
+    assert any(outbound.get("tag") == node_tag for outbound in payload["outbounds"])
+
+
+def test_users_download_sbclient_bundle(client):
+    suffix = uuid.uuid4().hex[:8]
+    node_tag = _ensure_node(
+        "vless://12345678-abcd-0000-0000-000000000002@1.2.3.4:443"
+        "?security=reality&sni=example.com&pbk=fakepubkey&sid=aabbcc&fp=chrome&type=tcp"
+        f"#page-dl-sbclient-{suffix}"
+    )
+    group_id = _create_group(client, name=f"dl-sbclient-{suffix}", node_tags=[node_tag])
+
+    response = client.get(f"/users/groups/{group_id}/download/sbclient")
+
+    assert response.status_code == 200
+    assert response.headers.get("cache-control") == "no-store"
+    assert ".sbclient" in response.headers.get("content-disposition", "")
+    payload = json.loads(response.content)
+    assert payload["schema_version"] == 1
+    assert payload["profiles"][0]["name"] == node_tag
+    assert payload["profiles"][0]["route_preset"] == "bypass_lan"
+
+
+def test_users_download_redirects_when_group_is_missing(client):
+    response = client.get("/users/groups/999999/download/config", follow_redirects=True)
+
+    assert response.status_code == 200
+    assert b"Config group not found." in response.content
+    assert b"vless://" not in response.content
+
+
+def test_users_download_redirects_when_group_has_no_nodes(client):
+    suffix = uuid.uuid4().hex[:8]
+    group_id = _create_group(client, name=f"dl-empty-{suffix}")
+
+    response = client.get(f"/users/groups/{group_id}/download/sbclient", follow_redirects=True)
+
+    assert response.status_code == 200
+    assert b"Assigned config group has no nodes." in response.content
+    assert b"vless://" not in response.content
+
+
+def test_users_download_redirects_when_transport_is_unsupported(client):
+    suffix = uuid.uuid4().hex[:8]
+    node_tag = _ensure_node(
+        "vless://12345678-abcd-0000-0000-000000000002@1.2.3.4:443"
+        "?security=reality&sni=example.com&pbk=fakepubkey&sid=aabbcc&fp=chrome&type=xhttp"
+        f"#page-dl-xhttp-{suffix}"
+    )
+    group_id = _create_group(client, name=f"dl-xhttp-{suffix}", node_tags=[node_tag])
+
+    response = client.get(f"/users/groups/{group_id}/download/config", follow_redirects=True)
+
+    assert response.status_code == 200
+    assert b"XHTTP" in response.content
+    assert b"vless://" not in response.content
+
+
+def _node_id(tag: str) -> int:
+    db = SessionLocal()
+    try:
+        return db.query(Node).filter(Node.tag == tag).one().id
+    finally:
+        db.close()
+
+
+def test_nodes_page_renders_topology_role_select(client):
+    suffix = uuid.uuid4().hex[:8]
+    _ensure_node(
+        "vless://12345678-abcd-0000-0000-000000000002@1.2.3.4:443"
+        "?security=reality&sni=example.com&pbk=fakepubkey&sid=aabbcc&fp=chrome&type=tcp"
+        f"#page-role-select-{suffix}"
+    )
+    response = client.get("/nodes")
+    assert response.status_code == 200
+    assert b"Entry relay" in response.content
+    assert b"Upstream exit" in response.content
+
+
+def test_nodes_save_topology_role(client):
+    suffix = uuid.uuid4().hex[:8]
+    tag = _ensure_node(
+        "vless://12345678-abcd-0000-0000-000000000002@1.2.3.4:443"
+        "?security=reality&sni=example.com&pbk=fakepubkey&sid=aabbcc&fp=chrome&type=tcp"
+        f"#page-role-{suffix}"
+    )
+    node_id = _node_id(tag)
+
+    response = client.post(f"/nodes/{node_id}/metadata", data={
+        "country_code": "",
+        "country_name": "",
+        "provider_name": "",
+        "notes": "",
+        "topology_role": "entry_relay",
+    }, follow_redirects=True)
+
+    assert response.status_code == 200
+    assert b"Updated metadata" in response.content
+    assert b"entry relay" in response.content
+    payload = json.loads(client.get("/api/nodes/export").content)
+    exported = next(item for item in payload if item["tag"] == tag)
+    assert exported["topology_role"] == "entry_relay"
+
+
+def test_nodes_reject_invalid_topology_role(client):
+    suffix = uuid.uuid4().hex[:8]
+    tag = _ensure_node(
+        "vless://12345678-abcd-0000-0000-000000000002@1.2.3.4:443"
+        "?security=reality&sni=example.com&pbk=fakepubkey&sid=aabbcc&fp=chrome&type=tcp"
+        f"#page-role-bad-{suffix}"
+    )
+    node_id = _node_id(tag)
+
+    response = client.post(f"/nodes/{node_id}/metadata", data={
+        "topology_role": "panel",
+    }, follow_redirects=True)
+
+    assert response.status_code == 200
+    assert b"Invalid topology role" in response.content
+    payload = json.loads(client.get("/api/nodes/export").content)
+    exported = next(item for item in payload if item["tag"] == tag)
+    assert exported["topology_role"] is None
+
+
+def test_nodes_import_roundtrip_topology_role(client):
+    suffix = uuid.uuid4().hex[:8]
+    tag = _ensure_node(
+        "vless://12345678-abcd-0000-0000-000000000002@1.2.3.4:443"
+        "?security=reality&sni=example.com&pbk=fakepubkey&sid=aabbcc&fp=chrome&type=tcp"
+        f"#page-role-import-{suffix}"
+    )
+    node_id = _node_id(tag)
+    client.post(f"/nodes/{node_id}/metadata", data={"topology_role": "upstream_exit"}, follow_redirects=True)
+    export_json = client.get("/api/nodes/export").content.decode("utf-8")
+
+    response = client.post("/api/nodes/import", data={"nodes_json": export_json}, follow_redirects=True)
+
+    assert response.status_code == 200
+    assert b"Imported" in response.content
+    payload = json.loads(client.get("/api/nodes/export").content)
+    exported = next(item for item in payload if item["tag"] == tag)
+    assert exported["topology_role"] == "upstream_exit"

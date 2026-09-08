@@ -2,6 +2,7 @@ import pytest
 
 from app.parsers.hysteria2 import Hysteria2Node, parse_hysteria2
 from app.parsers.vless import VlessNode, parse_vless
+from app.singbox.dns import DNS_PRESETS
 from app.singbox.generator import build_outbound, generate_config
 
 VLESS_URL = (
@@ -124,7 +125,18 @@ def test_tun_inbound():
     assert tun is not None
     assert tun["auto_route"] is True
     assert tun["stack"] == "gvisor"
+    assert tun["mtu"] == 1400
     assert {i["type"] for i in cfg["inbounds"]} == {"tun"}
+
+
+@pytest.mark.parametrize("dns_preset", DNS_PRESETS)
+def test_dns_servers_use_native_direct_dialer(dns_preset):
+    cfg = generate_config(parse_vless(VLESS_URL), dns_preset=dns_preset)
+    server = cfg["dns"]["servers"][0]
+    assert "detour" not in server
+    assert server["type"] == "tls"
+    assert server["server_port"] == 853
+    assert cfg["dns"]["final"] == server["tag"]
 
 
 def test_dns_hijack_rule():

@@ -14,6 +14,7 @@ browser on localhost
      -> sudo helper for config deploy/restore/service control
      -> optional notification clients
      -> optional Telegram long-polling bot
+     -> optional ssh to a named alias allowlist
 ```
 
 The app process should run as a normal user. It does not need root access
@@ -44,8 +45,10 @@ Alembic migrations under `migrations/versions`.
 
 Core tables:
 
-- `nodes`: parsed proxy node source data and metadata
-- `settings`: simple key/value settings
+- `nodes`: parsed proxy node source data and metadata, including optional
+  topology role labels
+- `settings`: key/value including DNS/route presets, `app_bypass_json`, and
+  `server_notes_json`
 - `profiles`: named node plus DNS/route preset combinations
 - `deploy_log`: deploy attempt audit trail
 - `health_check_log`: background health samples
@@ -118,4 +121,5 @@ Telegram support has two independent uses:
 
 The bot routes admin and user commands through the same service/deploy/user
 distribution logic used by the web UI. Handlers format Telegram responses but
-do not duplicate sing-box config generation.
+do not duplicate sing-box config generation. Operator downloads of generated
+JSON and `.sbclient` files use the same assignment and document builders.

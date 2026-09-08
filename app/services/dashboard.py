@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.health import HealthReport
 from app.models import Node
+from app.services.app_bypass import process_bypass_for_config
 from app.services.log_insights import LogInsight
 from app.services.nodes import deserialize_node
 from app.services.settings import presets, singbox_log_level
@@ -32,6 +33,7 @@ def validate_node_config(db: Session, node: Node) -> ValidationResult:
             dns_preset=dns_preset,
             route_preset=route_preset,
             log_level=singbox_log_level(db),
+            process_bypass=process_bypass_for_config(db),
         )
     except Exception as exc:
         return ValidationResult(False, f"Config generation error: {exc}")
@@ -114,6 +116,7 @@ def render_config_diff(db: Session, node: Optional[Node], current_config: Option
             dns_preset=dns_preset,
             route_preset=route_preset,
             log_level=singbox_log_level(db),
+            process_bypass=process_bypass_for_config(db),
         )
         new_text = json.dumps(new_config, indent=2)
     except Exception as exc:

@@ -44,7 +44,8 @@ control plane, and no remote exposure by default.
 - Store managed Telegram users and groups.
 - Generate user-specific sing-box config files, `.sbclient` bundles, and raw-link
   fallbacks from selected nodes.
-- Send config updates through Telegram.
+- Send config updates through Telegram, or download the same artifacts from the
+  Users page.
 - Track group versions, deterministic config fingerprints, delivery attempts,
   and refresh limits.
 - Reduce manual support for family or friend devices.
@@ -53,6 +54,8 @@ control plane, and no remote exposure by default.
 
 - Local diagnostics pages for logs, service state, health checks, and latency
   history.
+- Linux per-app TUN bypass from installed `.desktop` entries on this host.
+- SSH inventory for a small named host list (`hykz`, `aeza`, `swvps`, `ge_vps`).
 - Optional single-admin web auth with signed cookies and basic CSRF checks.
 - Optional notifications through `notify-send`, Telegram, and ntfy.sh.
 - Optional Telegram admin bot for status, logs, node listing, and activation.
@@ -74,7 +77,9 @@ This project is not:
   actual VPN usage server-side.
 - Telegram notifications and desktop notifications are best effort.
 - Device binding, bandwidth accounting, server-side session control, MTProto,
-  and multi-server management are not implemented.
+  and generic fleet/Ansible management are not implemented.
+- The Servers page can probe a fixed SSH alias list. It does not call 3x-ui
+  or edit remote protocol configs yet.
 - The app targets Linux hosts with `systemd`, `sudo`, and a local sing-box
   service.
 
@@ -168,6 +173,9 @@ root.
 More detail:
 
 - [docs/architecture.md](docs/architecture.md)
+- [docs/ecosystem.md](docs/ecosystem.md)
+- [docs/client-contract.md](docs/client-contract.md)
+- [docs/topology.md](docs/topology.md)
 - [docs/design-decisions.md](docs/design-decisions.md)
 - [docs/recovery.md](docs/recovery.md)
 - [docs/roadmap.md](docs/roadmap.md)

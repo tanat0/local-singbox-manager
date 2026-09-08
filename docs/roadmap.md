@@ -9,8 +9,12 @@ features.
 - Local FastAPI web UI for a single Linux host running sing-box.
 - Node parsing for VLESS and Hysteria2/Hy2 URLs.
 - Config generation from stored node data plus DNS and route presets.
+- DNS presets use the native TLS DNS dialer's direct connection.
+- TUN inbound MTU `1400`.
 - Always-on route guards for generated TUN configs: selected domains are
   blocked and basic RU destinations go direct.
+- Linux host per-app TUN bypass from installed `.desktop` entries.
+- SSH inventory page for a small named host list, without 3x-ui API access.
 - Deploy pipeline with validation, helper-based config replacement, restart,
   lightweight health check, backup, rollback, and deploy logs.
 - Profiles for node plus DNS/route preset combinations.
@@ -24,6 +28,13 @@ features.
   versions, fingerprints, refresh limits, and delivery logs.
 - Separate managed-user Telegram delivery of `.sbclient` bundles for the local
   `singbox-client` app through `/sbclient`.
+- Operator web download of generated sing-box JSON and `.sbclient` bundles from
+  the Users page.
+- Optional node `topology_role` labels for manual relay versus upstream
+  inventory.
+- Read-only operations smoke check via `make ops-check`.
+- Disaster-recovery notes for database dump, `.env`, helper backups, and
+  rollback failure.
 - VLESS transport compatibility for generated configs: HTTP/H2, gRPC,
   WebSocket, and HTTPUpgrade are mapped to sing-box `transport` objects; known
   unsupported modes fail explicitly instead of producing invalid JSON.
@@ -41,12 +52,12 @@ features.
 
 ## 1.4 Client Config Delivery Validation
 
+- Keep `docs/client-contract.md` aligned with the companion
+  `singbox-client/docs/client-bundle-v1.md` contract.
 - Manually test generated sing-box JSON import on the target client devices.
 - Manually test `.sbclient` import on target Windows and Android devices.
 - Keep raw URL fallback visible when generated JSON or `.sbclient` attachments
   cannot be prepared for an unsupported transport.
-- Add a web admin download action for `.sbclient` bundles if operators need a
-  non-Telegram export path.
 - Decide whether route guards should become configurable only after generated
   client configs have a clear UX and import path.
 - Keep raw URL delivery available until generated config delivery is proven
@@ -54,28 +65,35 @@ features.
 
 ## 1.5 Operations Hardening
 
-- Add a smoke command for helper install, sudoers, sing-box binary, and systemd
-  service state without modifying deployed config.
-- Add disaster-recovery export notes for DB dump, `.env.example`, rendered
-  service/sudoers examples, and current generated config metadata.
-- Improve manual restore documentation for rollback failure cases.
+- Validate DNS stability during an agreed activation window: compare the
+  existing Quad9 and Cloudflare DoT presets while keeping the node, MTU, and
+  bandwidth unchanged. Keep the previous preset available for rollback.
+- After DNS validation, compare Hy2 and TCP VLESS with the same small workload.
+  Check counter deltas and DNS errors before considering server-side tuning.
 - Continue splitting broad tests or service modules only when feature work makes
   the current shape harder to maintain.
 
 ## 1.6 3x-ui Relay Topology
 
-- Document the first supported relay topology as manual inventory:
+- Keep [docs/topology.md](topology.md) aligned with the manual inventory:
   client or managed user config -> RU 3x-ui inbound -> upstream nodes.
-- Add node/topology metadata only if it helps the operator understand which
-  stored links are entry relays and which are upstream exits.
-- Treat exported 3x-ui links as ordinary imported nodes in the first pass.
+- Use `topology_role` only as an operator label for entry relays and upstream
+  exits. Do not let it change generation or delivery.
+- Treat exported 3x-ui links as ordinary imported nodes.
 - Do not store 3x-ui panel credentials or call the 3x-ui API until there is a
   concrete operation that cannot be handled by manual import/export.
+
+## 1.7 Remote Host Knobs
+
+- Use the Servers SSH inventory to edit non-secret remote knobs (Hysteria
+  bandwidth, UDP buffer sysctls) with an explicit preview.
+- Keep 3x-ui as imported nodes only. Do not open panel databases or print
+  credentials.
 
 ## Non-Goals
 
 - Hosted multi-tenant control plane.
-- General remote server fleet management.
+- Generic remote fleet / Ansible replacement.
 - Server-side bandwidth accounting or traffic enforcement.
 - Device binding.
 - Reliable remote kill-switch for distributed client configs.

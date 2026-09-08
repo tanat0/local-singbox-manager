@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Servers — Sing-Box Manager{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>Servers</h1>
+  <span class="text-dim">SSH inventory via local aliases. No panel passwords, no 3x-ui API.</span>
+</div>
+
+{% if msg %}
+<div class="alert alert-{{ msg_type }}">{{ msg }}</div>
+{% endif %}
+
+<div class="card">
+  <p class="text-dim section-note">
+    Aliases come from <code>~/.ssh/config</code>: hykz, aeza, swvps, ge_vps.
+    Probe reads service names, listen ports, and non-secret Hysteria knobs.
+    Protocol edits from this page are not implemented yet.
+  </p>
+</div>
+
+<form method="post" action="/servers/notes">
+  <div class="card-grid card-grid-2">
+    {% for server in servers %}
+    <div class="card server-card">
+      <div class="card-header">
+        <h2>{{ server.spec.label }}</h2>
+        <span class="badge badge-gray">{{ server.spec.alias }}</span>
+      </div>
+      <p class="text-dim">
+        {{ server.spec.location }} · {{ server.spec.kind }} · {{ server.spec.role }}
+      </p>
+      <div class="form-group">
+        <label>Notes</label>
+        <textarea name="notes_{{ server.spec.alias }}" rows="2">{{ server.notes }}</textarea>
+      </div>
+      <button type="button" class="btn btn-outline btn-sm"
+              hx-post="/servers/{{ server.spec.alias }}/probe"
+              hx-disabled-elt="this"
+              hx-target="#probe-{{ server.spec.alias }}"
+              hx-swap="innerHTML">
+        Probe over SSH
+      </button>
+      <div id="probe-{{ server.spec.alias }}" class="server-probe">
+        <p class="text-dim">Not probed yet.</p>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="mt-lg">
+    <button type="submit" class="btn btn-primary">Save notes</button>
+  </div>
+</form>
+
+{% endblock %}
